@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "bun ./build",
+    "start": "vite preview",
     "dev": "vite dev",
-    "build": "bun --bun vite build",
+    "build": "vite build",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -23,7 +23,7 @@
     "dompurify": "^3.2.4"
   },
   "devDependencies": {
-    "@sveltejs/adapter-bun": "^1.0.0",
+    "@sveltejs/adapter-vercel": "^7.0.1",
     "@sveltejs/kit": "^3.0.1",
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "@tailwindcss/vite": "^4.3.3",
