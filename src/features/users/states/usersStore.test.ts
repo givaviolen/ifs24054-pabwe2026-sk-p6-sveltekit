@@ -1,3 +1,4 @@
+
 import { get } from "svelte/store";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fail, makeFile, ok, resetStores, testUser } from "../../../test-utils";
@@ -19,11 +20,21 @@ vi.mock("../api/userApi", () => ({
   putPassword: vi.fn(),
   putProfile: vi.fn(),
 }));
-vi.mock("../../auth/states/authStore", () => ({
-  refreshProfile: vi.fn().mockResolvedValue(undefined),
-}));
+
+// Mempertahankan seluruh ekspor asli authStore,
+// termasuk token, profile, dan isLoggedIn.
+vi.mock("../../auth/states/authStore", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../../auth/states/authStore")>();
+
+  return {
+    ...actual,
+    refreshProfile: vi.fn().mockResolvedValue(undefined),
+  };
+});
 
 beforeEach(() => {
+  vi.clearAllMocks();
   resetStores();
 });
 
@@ -43,7 +54,10 @@ describe("loadUsers", () => {
 
     const result = await loadUsers();
 
-    expect(result).toEqual({ ok: false, message: "Tidak ada akses" });
+    expect(result).toEqual({
+      ok: false,
+      message: "Tidak ada akses",
+    });
     expect(get(users)).toEqual([]);
   });
 });
@@ -52,9 +66,15 @@ describe("mutasi profil", () => {
   it("saveProfile memuat ulang profil setelah berhasil", async () => {
     vi.mocked(putProfile).mockResolvedValue(ok(null, "Profil diubah"));
 
-    const result = await saveProfile({ name: "A", email: "a@b.c" });
+    const result = await saveProfile({
+      name: "A",
+      email: "a@b.c",
+    });
 
-    expect(result).toEqual({ ok: true, message: "Profil diubah" });
+    expect(result).toEqual({
+      ok: true,
+      message: "Profil diubah",
+    });
     expect(refreshProfile).toHaveBeenCalledTimes(1);
     expect(get(profileBusy)).toBe(false);
   });
@@ -62,7 +82,10 @@ describe("mutasi profil", () => {
   it("saveProfile tidak memuat ulang profil bila gagal", async () => {
     vi.mocked(putProfile).mockResolvedValue(fail("Email dipakai"));
 
-    const result = await saveProfile({ name: "A", email: "a@b.c" });
+    const result = await saveProfile({
+      name: "A",
+      email: "a@b.c",
+    });
 
     expect(result.ok).toBe(false);
     expect(refreshProfile).not.toHaveBeenCalled();
@@ -70,6 +93,7 @@ describe("mutasi profil", () => {
 
   it("savePhoto memuat ulang profil setelah berhasil", async () => {
     vi.mocked(postPhoto).mockResolvedValue(ok());
+
     const file = makeFile();
 
     await savePhoto(file);
@@ -81,7 +105,10 @@ describe("mutasi profil", () => {
   it("savePassword tidak memuat ulang profil", async () => {
     vi.mocked(putPassword).mockResolvedValue(ok());
 
-    const result = await savePassword({ password: "lama", new_password: "baru" });
+    const result = await savePassword({
+      password: "lama",
+      new_password: "baru",
+    });
 
     expect(result.ok).toBe(true);
     expect(refreshProfile).not.toHaveBeenCalled();
@@ -89,13 +116,24 @@ describe("mutasi profil", () => {
 
   it("menyalakan penanda sibuk selama permintaan berjalan", async () => {
     let finish: (value: unknown) => void = () => {};
-    vi.mocked(putPassword).mockReturnValue(new Promise((resolve) => (finish = resolve)) as any);
 
-    const pending = savePassword({ password: "a", new_password: "b" });
+    vi.mocked(putPassword).mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      }) as any,
+    );
+
+    const pending = savePassword({
+      password: "a",
+      new_password: "b",
+    });
+
     expect(get(profileBusy)).toBe(true);
 
     finish(ok());
+
     await pending;
+
     expect(get(profileBusy)).toBe(false);
   });
 });
