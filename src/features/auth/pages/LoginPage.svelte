@@ -29,9 +29,9 @@
 
 <form class="mt-8 space-y-4" data-testid="login-form" onsubmit={handleSubmit}>
   <div>
-    <label for="email" class="mb-1 block text-sm font-medium">Email</label>
+    <label for="login-email-input" class="mb-1 block text-sm font-medium">Email</label>
     <input
-      id="email"
+      id="login-email-input"
       type="email"
       bind:value={$email}
       autocomplete="email"
@@ -39,9 +39,9 @@
     />
   </div>
   <div>
-    <label for="password" class="mb-1 block text-sm font-medium">Kata sandi</label>
+    <label for="login-password-input" class="mb-1 block text-sm font-medium">Kata sandi</label>
     <input
-      id="password"
+      id="login-password-input"
       type="password"
       bind:value={$password}
       autocomplete="current-password"
@@ -49,6 +49,7 @@
     />
   </div>
   <button
+    id="login-submit-button"
     type="submit"
     disabled={$authLoading}
     class="flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
