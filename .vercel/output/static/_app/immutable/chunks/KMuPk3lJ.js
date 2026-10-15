@@ -1,1 +1,0 @@
-import{c as e}from"./CJDGzhuC.js";import"./DtkUg0Is.js";function t(t){let n=e(t);return{value:n,reset:()=>n.set(t)}}export{t};
