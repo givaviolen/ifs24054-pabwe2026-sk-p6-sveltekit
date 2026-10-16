@@ -66,6 +66,10 @@ pipeline {
                 sh '''
                     set -e
 
+                    echo "=== Generating SvelteKit Types ==="
+
+                    npx svelte-kit sync
+
                     echo "=== Running Tests with Coverage ==="
 
                     npx vitest run --coverage
