@@ -18,6 +18,10 @@ export interface ApiOptions {
 
 const ACCESS_TOKEN_KEY = "access_token";
 
+// Permintaan dikirim ke proxy same-origin (src/routes/api/[...path]/+server.ts),
+// bukan langsung ke Delcom Open API, sehingga browser tidak melakukan CORS.
+const API_PATH = "/api";
+
 export const getAccessToken = (): string | null =>
   localStorage.getItem(ACCESS_TOKEN_KEY);
 
@@ -37,7 +41,7 @@ export const toResult = (response: ApiResponse): ActionResult => ({
 });
 
 /**
- * Pembungkus fetch ke Delcom Open API.
+ * Pembungkus fetch ke Delcom Open API (lewat proxy same-origin `/api`).
  * Header otorisasi: Authorization: Bearer <token>.
  */
 export async function apiFetch<T = any>(
@@ -61,7 +65,7 @@ export async function apiFetch<T = any>(
   }
 
   try {
-    const response = await fetch(`${DELCOM_BASEURL}${path}`, {
+    const response = await fetch(`${API_PATH}${path}`, {
       method,
       headers,
       body: payload,

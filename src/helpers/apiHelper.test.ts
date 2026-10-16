@@ -46,13 +46,13 @@ describe("isSuccess dan toResult", () => {
 });
 
 describe("apiFetch", () => {
-  it("mengirim GET dengan header Bearer bila token ada", async () => {
+  it("mengirim GET ke proxy /api dengan header Bearer bila token ada", async () => {
     putAccessToken("abc");
     fetchMock.mockResolvedValue(respond({ status: "success", message: "ok", data: 1 }));
 
     const result = await apiFetch("/courses");
 
-    expect(fetchMock).toHaveBeenCalledWith(`${DELCOM_BASEURL}/courses`, {
+    expect(fetchMock).toHaveBeenCalledWith("/api/courses", {
       method: "GET",
       headers: { Authorization: "Bearer abc" },
       body: undefined,
