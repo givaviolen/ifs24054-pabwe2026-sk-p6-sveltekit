@@ -26,6 +26,7 @@ describe("proxyRequest", () => {
     expect(url).toBe(`${DELCOM_BASEURL}/courses?is_me=1`);
     expect(init.method).toBe("GET");
     expect(init.body).toBeUndefined();
+    expect(init.headers.get("accept")).toBe("application/json");
     expect(init.headers.get("authorization")).toBe("Bearer tok");
     expect(init.headers.get("content-type")).toBeNull();
     expect(init.headers.get("cookie")).toBeNull();
@@ -68,6 +69,24 @@ describe("proxyRequest", () => {
 
     expect(response.status).toBe(204);
     expect(response.headers.get("content-type")).toBe("application/json");
+  });
+
+  it("mengubah balasan non-JSON dari server asal menjadi JSON", async () => {
+    stubFetch(
+      new Response("<h1>502 Bad Gateway</h1>", {
+        status: 502,
+        headers: { "content-type": "text/html" },
+      }),
+    );
+    const request = new Request("http://localhost/api/users/me");
+
+    const response = await proxyRequest(request, "users/me", "");
+
+    expect(response.status).toBe(502);
+    expect(response.headers.get("content-type")).toBe("application/json");
+    const body = await response.json();
+    expect(body.status).toBe("fail");
+    expect(body.message).toContain("502");
   });
 
   it("mengubah kegagalan jaringan menjadi respons 502", async () => {
