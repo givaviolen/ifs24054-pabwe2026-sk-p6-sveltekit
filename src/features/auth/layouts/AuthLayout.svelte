@@ -11,9 +11,9 @@
       <span class="text-xl font-bold">Delcom Courses</span>
     </div>
     <div>
-      <h1 class="text-4xl font-extrabold leading-tight">
+      <p class="text-4xl font-extrabold leading-tight">
         Belajar lewat kursus video, sesuai kecepatanmu sendiri.
-      </h1>
+      </p>
       <p class="mt-4 max-w-md text-indigo-100">
         Ikuti kursus, tonton materi YouTube, dan tandai yang sudah selesai.
         Atau buat kursusmu sendiri dan undang peserta untuk belajar bersama.

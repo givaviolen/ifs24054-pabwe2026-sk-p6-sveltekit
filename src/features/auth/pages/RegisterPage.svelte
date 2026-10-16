@@ -32,7 +32,7 @@
   }
 </script>
 
-<h2 class="text-2xl font-bold">Buat akun baru</h2>
+<h1 class="text-2xl font-bold">Buat akun baru</h1>
 <p class="mt-1 text-sm text-slate-500">Daftar untuk mengikuti atau membuat kursus.</p>
 
 <form class="mt-8 space-y-4" data-testid="register-form" onsubmit={handleSubmit}>

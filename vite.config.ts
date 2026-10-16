@@ -28,6 +28,7 @@ export default defineConfig(({ mode }) => {
 
     build: {
       chunkSizeWarningLimit: 1500,
+      sourcemap: true,
     },
 
     define: {

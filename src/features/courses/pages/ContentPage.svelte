@@ -19,9 +19,9 @@
 </a>
 
 {#if $contentLoading && !$content}
-  <p class="py-16 text-center text-slate-500">Memuat materi...</p>
+  <h1 class="py-16 text-center text-base font-normal text-slate-500">Memuat materi...</h1>
 {:else if !$content}
-  <p class="py-16 text-center font-semibold">Materi tidak ditemukan</p>
+  <h1 class="py-16 text-center text-base font-semibold">Materi tidak ditemukan</h1>
 {:else}
   <article class="space-y-4">
     <h1 class="text-2xl font-bold">{$content.title}</h1>

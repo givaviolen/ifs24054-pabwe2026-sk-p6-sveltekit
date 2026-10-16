@@ -64,10 +64,10 @@
 </script>
 
 {#if $courseLoading && !$course}
-  <p class="py-16 text-center text-slate-500">Memuat kursus...</p>
+  <h1 class="py-16 text-center text-base font-normal text-slate-500">Memuat kursus...</h1>
 {:else if !$course}
   <div class="py-16 text-center">
-    <p class="font-semibold">Kursus tidak ditemukan</p>
+    <h1 class="text-base font-semibold">Kursus tidak ditemukan</h1>
     <a href="/" class="mt-2 inline-block text-sm text-indigo-600 hover:underline">Kembali ke Semua Kursus</a>
   </div>
 {:else}
