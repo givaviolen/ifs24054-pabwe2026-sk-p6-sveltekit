@@ -86,7 +86,15 @@
       {#each filtered as item (item.id)}
         <li class="flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white">
           {#if item.cover}
-            <img src={item.cover} alt={`Sampul ${item.title}`} class="h-36 w-full object-cover" />
+            <img
+              src={item.cover}
+              alt={`Sampul ${item.title}`}
+              width="400"
+              height="144"
+              loading="lazy"
+              decoding="async"
+              class="h-36 w-full object-cover"
+            />
           {:else}
             <div class="flex h-36 items-center justify-center bg-indigo-50 text-indigo-300">
               <GraduationCap class="h-12 w-12" />

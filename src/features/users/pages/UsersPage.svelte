@@ -48,7 +48,15 @@
       {#each filtered as user (user.id)}
         <li class="flex items-center gap-4 p-4">
           {#if user.photo}
-            <img src={user.photo} alt={user.name} class="h-11 w-11 rounded-full object-cover" />
+            <img
+              src={user.photo}
+              alt={user.name}
+              width="44"
+              height="44"
+              loading="lazy"
+              decoding="async"
+              class="h-11 w-11 rounded-full object-cover"
+            />
           {:else}
             <span class="flex h-11 w-11 items-center justify-center rounded-full bg-indigo-100 font-bold text-indigo-700">
               {user.name.charAt(0).toUpperCase()}

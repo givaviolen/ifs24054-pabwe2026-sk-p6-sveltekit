@@ -74,7 +74,15 @@
   <article class="space-y-6">
     <div class="overflow-hidden rounded-xl border border-slate-200 bg-white">
       {#if $course.cover}
-        <img src={$course.cover} alt={`Sampul ${$course.title}`} class="h-56 w-full object-cover" />
+        <img
+          src={$course.cover}
+          alt={`Sampul ${$course.title}`}
+          width="1024"
+          height="224"
+          fetchpriority="high"
+          decoding="async"
+          class="h-56 w-full object-cover"
+        />
       {:else}
         <div class="flex h-56 items-center justify-center bg-indigo-50 text-indigo-300">
           <GraduationCap class="h-16 w-16" />

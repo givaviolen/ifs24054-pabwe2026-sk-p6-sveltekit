@@ -28,7 +28,14 @@
   <div class="flex items-center gap-3">
     <a href="/profile" class="flex items-center gap-2 text-sm font-medium">
       {#if $profile?.photo}
-        <img src={$profile.photo} alt="Foto profil" class="h-8 w-8 rounded-full object-cover" />
+        <img
+          src={$profile.photo}
+          alt="Foto profil"
+          width="32"
+          height="32"
+          decoding="async"
+          class="h-8 w-8 rounded-full object-cover"
+        />
       {:else}
         <span class="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-100 font-bold text-indigo-700">
           {$profile ? $profile.name.charAt(0).toUpperCase() : "?"}

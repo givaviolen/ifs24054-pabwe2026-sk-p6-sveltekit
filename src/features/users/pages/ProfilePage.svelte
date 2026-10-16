@@ -56,7 +56,15 @@
 <section class="space-y-6">
   <div class="flex items-center gap-4">
     {#if user.photo}
-      <img src={user.photo} alt={user.name} class="h-20 w-20 rounded-full object-cover" />
+      <img
+        src={user.photo}
+        alt={user.name}
+        width="80"
+        height="80"
+        fetchpriority="high"
+        decoding="async"
+        class="h-20 w-20 rounded-full object-cover"
+      />
     {:else}
       <span class="flex h-20 w-20 items-center justify-center rounded-full bg-indigo-100 text-3xl font-bold text-indigo-700">
         {user.name.charAt(0).toUpperCase()}
