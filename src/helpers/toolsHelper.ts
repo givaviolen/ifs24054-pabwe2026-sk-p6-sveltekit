@@ -80,9 +80,9 @@ const YOUTUBE_PATTERN =
 
 /** Mengubah tautan YouTube biasa menjadi tautan embed. Kosong bila tidak valid. */
 export const getYoutubeEmbedUrl = (url: string): string => {
-  const match = url.match(YOUTUBE_PATTERN);
+  const match = YOUTUBE_PATTERN.exec(url);
   return match ? `https://www.youtube.com/embed/${match[1]}` : "";
 };
 
 export const pickFile = (event: Event): File | undefined =>
-  (event.currentTarget as HTMLInputElement).files![0];
+  (event.currentTarget as HTMLInputElement).files[0];

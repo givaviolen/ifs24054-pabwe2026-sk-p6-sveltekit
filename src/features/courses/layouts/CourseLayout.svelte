@@ -26,5 +26,7 @@
     </main>
   </div>
 {:else}
-  <div class="flex min-h-screen items-center justify-center text-slate-500">Memuat sesi...</div>
+  <main class="flex min-h-screen items-center justify-center text-slate-500" aria-live="polite">
+    Memuat sesi...
+  </main>
 {/if}
