@@ -91,7 +91,6 @@
               alt={`Sampul ${item.title}`}
               width="400"
               height="144"
-              loading="lazy"
               decoding="async"
               class="h-36 w-full object-cover"
             />

@@ -11,7 +11,7 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [
       sveltekit({
-        adapter: adapter(),
+        adapter: adapter({ runtime: "nodejs24.x" }),
         inlineStyleThreshold: Infinity,
       }),
       tailwindcss(),

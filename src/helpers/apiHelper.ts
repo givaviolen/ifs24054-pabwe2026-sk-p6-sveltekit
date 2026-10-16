@@ -18,9 +18,12 @@ export interface ApiOptions {
 
 const ACCESS_TOKEN_KEY = "access_token";
 
-// Permintaan dikirim ke proxy same-origin (src/routes/api/[...path]/+server.ts),
-// bukan langsung ke Delcom Open API, sehingga browser tidak melakukan CORS.
+// Jalur utama: proxy same-origin (src/routes/api/[...path]/+server.ts),
+// sehingga browser tidak melakukan CORS ke Delcom Open API.
 const API_PATH = "/api";
+
+// Status gerbang yang menandakan server di belakang proxy sedang bermasalah.
+const GATEWAY_ERRORS = [502, 503, 504];
 
 export const getAccessToken = (): string | null =>
   localStorage.getItem(ACCESS_TOKEN_KEY);
@@ -40,9 +43,25 @@ export const toResult = (response: ApiResponse): ActionResult => ({
   message: response.message,
 });
 
+interface Attempt<T> {
+  data: ApiResponse<T>;
+  gatewayError: boolean;
+}
+
+async function send<T>(url: string, init: RequestInit): Promise<Attempt<T>> {
+  const response = await fetch(url, init);
+  return {
+    data: await response.json(),
+    gatewayError: GATEWAY_ERRORS.includes(response.status),
+  };
+}
+
 /**
- * Pembungkus fetch ke Delcom Open API (lewat proxy same-origin `/api`).
+ * Pembungkus fetch ke Delcom Open API.
  * Header otorisasi: Authorization: Bearer <token>.
+ * Permintaan dicoba lewat proxy `/api` lebih dulu; bila proxy gagal
+ * (galat jaringan, balasan bukan JSON, atau status 502/503/504),
+ * permintaan diulang langsung ke Delcom Open API.
  */
 export async function apiFetch<T = any>(
   path: string,
@@ -64,13 +83,19 @@ export async function apiFetch<T = any>(
     payload = JSON.stringify(body);
   }
 
+  const init: RequestInit = { method, headers, body: payload };
+
   try {
-    const response = await fetch(`${API_PATH}${path}`, {
-      method,
-      headers,
-      body: payload,
-    });
-    return await response.json();
+    const proxied = await send<T>(`${API_PATH}${path}`, init);
+    if (!proxied.gatewayError) {
+      return proxied.data;
+    }
+  } catch {
+    // Proxy tidak tersedia atau membalas non-JSON: lanjut ke jalur cadangan.
+  }
+
+  try {
+    return (await send<T>(`${DELCOM_BASEURL}${path}`, init)).data;
   } catch {
     return {
       status: "error",

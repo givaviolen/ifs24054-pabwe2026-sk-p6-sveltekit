@@ -10,7 +10,13 @@ import {
 
 const fetchMock = vi.fn();
 
-const respond = (body: unknown) => ({ json: () => Promise.resolve(body) });
+const respond = (body: unknown, status = 200) => ({
+  status,
+  json: () => Promise.resolve(body),
+});
+
+const ok = (data: unknown = null) =>
+  respond({ status: "success", message: "ok", data });
 
 beforeEach(() => {
   fetchMock.mockReset();
@@ -45,13 +51,14 @@ describe("isSuccess dan toResult", () => {
   });
 });
 
-describe("apiFetch", () => {
+describe("apiFetch lewat proxy", () => {
   it("mengirim GET ke proxy /api dengan header Bearer bila token ada", async () => {
     putAccessToken("abc");
-    fetchMock.mockResolvedValue(respond({ status: "success", message: "ok", data: 1 }));
+    fetchMock.mockResolvedValue(ok(1));
 
     const result = await apiFetch("/courses");
 
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledWith("/api/courses", {
       method: "GET",
       headers: { Authorization: "Bearer abc" },
@@ -61,7 +68,7 @@ describe("apiFetch", () => {
   });
 
   it("tidak mengirim Authorization bila token tidak ada", async () => {
-    fetchMock.mockResolvedValue(respond({ status: "success", message: "", data: null }));
+    fetchMock.mockResolvedValue(ok());
 
     await apiFetch("/courses");
 
@@ -70,7 +77,7 @@ describe("apiFetch", () => {
 
   it("tidak mengirim Authorization bila auth dimatikan", async () => {
     putAccessToken("abc");
-    fetchMock.mockResolvedValue(respond({ status: "success", message: "", data: null }));
+    fetchMock.mockResolvedValue(ok());
 
     await apiFetch("/auth/login", { auth: false });
 
@@ -78,7 +85,7 @@ describe("apiFetch", () => {
   });
 
   it("mengirim body JSON beserta Content-Type", async () => {
-    fetchMock.mockResolvedValue(respond({ status: "success", message: "", data: null }));
+    fetchMock.mockResolvedValue(ok());
 
     await apiFetch("/courses", { method: "POST", body: { title: "A" } });
 
@@ -89,7 +96,7 @@ describe("apiFetch", () => {
   });
 
   it("mengirim FormData tanpa Content-Type", async () => {
-    fetchMock.mockResolvedValue(respond({ status: "success", message: "", data: null }));
+    fetchMock.mockResolvedValue(ok());
     const form = new FormData();
 
     await apiFetch("/courses/1/cover", { method: "POST", form });
@@ -99,18 +106,76 @@ describe("apiFetch", () => {
     expect(init.headers["Content-Type"]).toBeUndefined();
   });
 
-  it("mengembalikan respons galat bila fetch gagal", async () => {
+  it("tidak beralih ke jalur cadangan untuk galat biasa (mis. 401)", async () => {
+    fetchMock.mockResolvedValue(
+      respond({ status: "fail", message: "Tidak terautentikasi", data: null }, 401)
+    );
+
+    const result = await apiFetch("/users/me");
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result.status).toBe("fail");
+  });
+});
+
+describe("apiFetch jalur cadangan", () => {
+  it("beralih langsung ke Delcom bila proxy melempar galat jaringan", async () => {
+    fetchMock
+      .mockRejectedValueOnce(new Error("proxy mati"))
+      .mockResolvedValueOnce(ok(2));
+
+    const result = await apiFetch("/courses");
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/courses");
+    expect(fetchMock.mock.calls[1][0]).toBe(`${DELCOM_BASEURL}/courses`);
+    expect(result.data).toBe(2);
+  });
+
+  it("beralih langsung ke Delcom bila proxy membalas non-JSON", async () => {
+    fetchMock
+      .mockResolvedValueOnce({
+        status: 404,
+        json: () => Promise.reject(new Error("bukan json")),
+      })
+      .mockResolvedValueOnce(ok(3));
+
+    const result = await apiFetch("/courses");
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.data).toBe(3);
+  });
+
+  it("beralih langsung ke Delcom bila proxy membalas 502", async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        respond({ status: "fail", message: "gerbang rusak", data: null }, 502)
+      )
+      .mockResolvedValueOnce(ok(4));
+
+    const result = await apiFetch("/users/me");
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1][0]).toBe(`${DELCOM_BASEURL}/users/me`);
+    expect(result.data).toBe(4);
+  });
+
+  it("mengembalikan respons galat bila kedua jalur gagal", async () => {
     fetchMock.mockRejectedValue(new Error("offline"));
 
     const result = await apiFetch("/courses");
 
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(result.status).toBe("error");
     expect(result.message).toMatch(/terhubung/i);
     expect(result.data).toBeNull();
   });
 
-  it("mengembalikan respons galat bila isi bukan JSON", async () => {
-    fetchMock.mockResolvedValue({ json: () => Promise.reject(new Error("bukan json")) });
+  it("mengembalikan respons galat bila kedua jalur membalas non-JSON", async () => {
+    fetchMock.mockResolvedValue({
+      status: 200,
+      json: () => Promise.reject(new Error("bukan json")),
+    });
 
     const result = await apiFetch("/courses");
 
