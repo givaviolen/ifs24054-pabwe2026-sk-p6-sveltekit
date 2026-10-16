@@ -1,20 +1,29 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
-  import { onMount } from "svelte";
-  import { GraduationCap, Image, Lock, Pencil, Play, Plus, Star, Trash2 } from "lucide-svelte";
-  import { averageRating, cn, formatDate, notify, showConfirmDialog } from "../../../helpers/toolsHelper";
-  import { profile } from "../../auth/states/authStore";
-  import type { CourseContent } from "../api/courseApi";
+  import { ArrowLeft, Camera, Check, Circle, Pencil, Plus, Trash2, Video } from "lucide-svelte";
+  import { useInput } from "../../../hooks/useInput";
+  import {
+    formatDate,
+    formatRating,
+    getCoverUrl,
+    getPhotoUrl,
+    runWithFeedback,
+    showConfirmDialog,
+    showWarningDialog,
+  } from "../../../helpers/toolsHelper";
+  import { authProfile } from "../../auth/states/authStore";
+  import StarRating from "../components/StarRating.svelte";
   import ChangeCoverModal from "../modals/ChangeCoverModal.svelte";
   import ChangeModal from "../modals/ChangeModal.svelte";
   import ContentModal from "../modals/ContentModal.svelte";
   import {
     course,
-    courseLoading,
+    isCourseLoading,
+    isRating,
+    isStudentMutating,
     joinCourse,
     leaveCourse,
     loadCourse,
-    mutating,
     rateCourse,
     removeContent,
     removeCourse,
@@ -25,178 +34,251 @@
   let showChange = $state(false);
   let showCover = $state(false);
   let showContent = $state(false);
-  let editingContent = $state<CourseContent | null>(null);
+  let editingContent: CourseContent | null = $state(null);
+  let rating = $state(0);
+  const { value: comment } = useInput("");
 
-  // Pemilik: user_id kursus sama dengan id profil. Peserta: id profil ada di students.
-  const isOwner = $derived($course !== null && $course.user_id === $profile!.id);
-  const isStudent = $derived(
-    $course !== null && $course.students.some((student) => student.id === $profile!.id)
-  );
+  // Pemilik: user_id sama dengan id profil. Peserta: id profil ada di `students`.
   // Antarmuka pemilik didahulukan bila keduanya terpenuhi.
-  const role = $derived(isOwner ? "owner" : isStudent ? "student" : "visitor");
-  const myRating = $derived(
-    $course?.ratings.find((item) => item.user_id === $profile!.id)?.rating ?? 0
+  const role = $derived(
+    $course.user_id === $authProfile.id
+      ? "owner"
+      : $course.students.includes($authProfile.id)
+        ? "student"
+        : "guest",
   );
 
-  onMount(() => {
-    course.set(null);
+  $effect(() => {
     loadCourse(courseId);
   });
 
-  function openContentModal(item: CourseContent | null) {
+  const reload = () => loadCourse(courseId);
+  const closeModals = () => {
+    showChange = false;
+    showCover = false;
+    showContent = false;
+  };
+  const openChange = () => (showChange = true);
+  const openCover = () => (showCover = true);
+  const openAddContent = () => {
+    editingContent = null;
+    showContent = true;
+  };
+  const openEditContent = (item: CourseContent) => {
     editingContent = item;
     showContent = true;
-  }
+  };
 
-  async function handleDelete() {
-    if (await showConfirmDialog("Kursus ini akan dihapus permanen.")) {
-      if (await notify(await removeCourse(courseId))) {
-        await goto("/");
-      }
+  const join = () => runWithFeedback(() => joinCourse(courseId), reload);
+
+  async function leave() {
+    if (await showConfirmDialog("Keluar dari kursus ini?")) {
+      await runWithFeedback(() => leaveCourse(courseId), reload);
     }
   }
 
-  async function handleDeleteContent(item: CourseContent) {
-    if (await showConfirmDialog(`Materi "${item.title}" akan dihapus.`)) {
-      await notify(await removeContent(courseId, item.id));
+  async function remove() {
+    if (await showConfirmDialog("Hapus kursus ini beserta seluruh materinya?")) {
+      await runWithFeedback(() => removeCourse(courseId), () => goto("/"));
     }
+  }
+
+  async function deleteContent(item: CourseContent) {
+    if (await showConfirmDialog(`Hapus materi "${item.title}"?`)) {
+      await runWithFeedback(() => removeContent(item.id), reload);
+    }
+  }
+
+  async function submitRating(event: SubmitEvent) {
+    event.preventDefault();
+    if (rating < 1) {
+      await showWarningDialog("Pilih rating 1 sampai 5.");
+      return;
+    }
+    await runWithFeedback(() => rateCourse(courseId, rating, $comment), reload);
   }
 </script>
 
-{#if $courseLoading && !$course}
-  <h1 class="py-16 text-center text-base font-normal text-slate-500">Memuat kursus...</h1>
+{#if $isCourseLoading}
+  <h1 class="sr-only">Detail Kursus</h1>
+  <p class="text-slate-600">Memuat kursus...</p>
 {:else if !$course}
-  <div class="py-16 text-center">
-    <h1 class="text-base font-semibold">Kursus tidak ditemukan</h1>
-    <a href="/" class="mt-2 inline-block text-sm text-indigo-600 hover:underline">Kembali ke Semua Kursus</a>
+  <div class="space-y-4">
+    <h1 class="text-2xl font-extrabold">Kursus tidak ditemukan.</h1>
+    <a href="/" class="font-semibold text-indigo-600">Kembali ke daftar kursus</a>
   </div>
 {:else}
-  <article class="space-y-6">
-    <div class="overflow-hidden rounded-xl border border-slate-200 bg-white">
-      {#if $course.cover}
-        <img
-          src={$course.cover}
-          alt={`Sampul ${$course.title}`}
-          width="1024"
-          height="224"
-          fetchpriority="high"
-          decoding="async"
-          class="h-56 w-full object-cover"
-        />
-      {:else}
-        <div class="flex h-56 items-center justify-center bg-indigo-50 text-indigo-300">
-          <GraduationCap class="h-16 w-16" />
+  <div class="space-y-8">
+    <a href="/" class="inline-flex items-center gap-2 text-sm font-medium text-slate-600">
+      <ArrowLeft class="h-4 w-4" /> Semua Kursus
+    </a>
+
+    <section class="overflow-hidden rounded-2xl bg-white shadow-sm">
+      <img
+        src={getCoverUrl($course.cover)}
+        alt={`Sampul ${$course.title}`}
+        width="1024"
+        height="224"
+        fetchpriority="high"
+        decoding="async"
+        class="h-56 w-full bg-indigo-50 object-cover"
+      />
+      <div class="space-y-4 p-6">
+        <h1 class="text-3xl font-extrabold">{$course.title}</h1>
+        <p class="text-slate-600">{$course.description}</p>
+        <div class="flex flex-wrap items-center gap-4 text-sm text-slate-600">
+          <span class="flex items-center gap-2">
+            <img
+              src={getPhotoUrl($course.author.photo, $course.author.name)}
+              alt={$course.author.name}
+              width="24"
+              height="24"
+              decoding="async"
+              class="h-6 w-6 rounded-full object-cover"
+            />
+            <span>{$course.author.name}</span>
+          </span>
+          <span>{`Dibuat ${formatDate($course.created_at)}`}</span>
+          <span>{`${$course.students.length} peserta`}</span>
+          <span>{`Rating: ${formatRating($course.avg_ratings)}`}</span>
         </div>
-      {/if}
-      <div class="space-y-3 p-5">
-        <h1 class="text-2xl font-bold">{$course.title}</h1>
-        <p class="whitespace-pre-wrap text-slate-600">{$course.description}</p>
-        <p class="flex items-center gap-1 text-sm text-slate-500">
-          <Star class="h-4 w-4" />
-          {averageRating($course.ratings)} dari {$course.ratings.length} rating · {$course.students.length} peserta · dibuat {formatDate($course.created_at)}
-        </p>
 
-        {#if role === "owner"}
-          <div class="flex flex-wrap gap-2 pt-2">
-            <button type="button" onclick={() => (showChange = true)} class="flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium hover:bg-slate-50">
-              <Pencil class="h-4 w-4" /> Ubah data
+        <div class="flex flex-wrap gap-3">
+          {#if role === "owner"}
+            <button type="button" onclick={openChange} class="flex items-center gap-2 rounded-xl border px-4 py-2 font-semibold">
+              <Pencil class="h-4 w-4" /> Ubah Data
             </button>
-            <button type="button" onclick={() => (showCover = true)} class="flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium hover:bg-slate-50">
-              <Image class="h-4 w-4" /> Ubah sampul
+            <button type="button" onclick={openCover} class="flex items-center gap-2 rounded-xl border px-4 py-2 font-semibold">
+              <Camera class="h-4 w-4" /> Ubah Sampul
             </button>
-            <button type="button" disabled={$mutating.remove} onclick={handleDelete} class="flex items-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-60">
-              <Trash2 class="h-4 w-4" /> Hapus kursus
+            <button type="button" onclick={remove} class="flex items-center gap-2 rounded-xl border border-rose-300 px-4 py-2 font-semibold text-rose-700">
+              <Trash2 class="h-4 w-4" /> Hapus Kursus
             </button>
-          </div>
-        {:else if role === "student"}
-          <div class="space-y-3 pt-2">
-            <div class="flex items-center gap-1" role="group" aria-label="Beri rating">
-              {#each [1, 2, 3, 4, 5] as value (value)}
-                <button
-                  type="button"
-                  aria-label={`Beri rating ${value}`}
-                  disabled={$mutating.rate}
-                  onclick={async () => notify(await rateCourse(courseId, value))}
-                  class="rounded p-1 hover:bg-amber-50"
-                >
-                  <Star class={cn("h-6 w-6", value <= myRating ? "fill-amber-400 text-amber-400" : "text-slate-300")} />
-                </button>
-              {/each}
-            </div>
-            <button type="button" disabled={$mutating.leave} onclick={async () => notify(await leaveCourse(courseId))} class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-60">
-              Keluar dari kursus
+          {:else if role === "student"}
+            <button
+              type="button"
+              onclick={leave}
+              disabled={$isStudentMutating}
+              class="rounded-xl border border-rose-300 px-4 py-2 font-semibold text-rose-700 disabled:opacity-60"
+            >
+              Keluar dari Kursus
             </button>
-          </div>
-        {:else}
-          <button type="button" disabled={$mutating.join} onclick={async () => notify(await joinCourse(courseId))} class="mt-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60">
-            Ikuti kursus
-          </button>
-        {/if}
+          {:else}
+            <button
+              type="button"
+              onclick={join}
+              disabled={$isStudentMutating}
+              class="rounded-xl bg-indigo-600 px-4 py-2 font-semibold text-white disabled:opacity-60"
+            >
+              Daftar Kursus
+            </button>
+          {/if}
+        </div>
       </div>
-    </div>
-
-    <section class="rounded-xl border border-slate-200 bg-white p-5">
-      <div class="flex items-center justify-between">
-        <h2 class="text-lg font-bold">Daftar materi</h2>
-        {#if role === "owner"}
-          <button type="button" onclick={() => openContentModal(null)} class="flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-700">
-            <Plus class="h-4 w-4" /> Tambah materi
-          </button>
-        {/if}
-      </div>
-
-      {#if $course.contents.length === 0}
-        <p class="mt-4 text-sm text-slate-500">Belum ada materi di kursus ini.</p>
-      {:else}
-        <ul class="mt-4 divide-y divide-slate-100">
-          {#each $course.contents as item (item.id)}
-            <li class="flex items-center gap-3 py-3">
-              {#if role === "visitor"}
-                <span class="flex flex-1 items-center gap-2 text-slate-400">
-                  <Lock class="h-4 w-4" />{item.title}
-                </span>
-              {:else}
-                <a href={`/courses/${courseId}/contents/${item.id}`} class="flex flex-1 items-center gap-2 font-medium hover:text-indigo-700">
-                  <Play class="h-4 w-4" />{item.title}
-                </a>
-              {/if}
-              {#if role === "owner"}
-                <button type="button" aria-label={`Ubah ${item.title}`} onclick={() => openContentModal(item)} class="rounded-lg p-1.5 hover:bg-slate-100">
-                  <Pencil class="h-4 w-4" />
-                </button>
-                <button type="button" aria-label={`Hapus ${item.title}`} disabled={$mutating.content} onclick={() => handleDeleteContent(item)} class="rounded-lg p-1.5 text-red-600 hover:bg-red-50 disabled:opacity-60">
-                  <Trash2 class="h-4 w-4" />
-                </button>
-              {/if}
-            </li>
-          {/each}
-        </ul>
-      {/if}
     </section>
 
-    {#if role === "owner"}
-      <section class="rounded-xl border border-slate-200 bg-white p-5">
-        <h2 class="text-lg font-bold">Peserta</h2>
-        {#if $course.students.length === 0}
-          <p class="mt-4 text-sm text-slate-500">Belum ada peserta.</p>
-        {:else}
-          <ul class="mt-4 space-y-2 text-sm">
-            {#each $course.students as student (student.id)}
-              <li>{student.name ?? student.id}</li>
-            {/each}
-          </ul>
-        {/if}
+    {#if role === "student"}
+      <section class="space-y-4 rounded-2xl bg-white p-6 shadow-sm">
+        <h2 class="text-lg font-bold">Progres Belajar</h2>
+        <div class="h-3 overflow-hidden rounded-full bg-slate-200">
+          <div
+            class="h-full bg-indigo-600"
+            style:width={`${$course.my_percentage_finished}%`}
+          ></div>
+        </div>
+        <p class="text-sm text-slate-600">{`${$course.my_percentage_finished}% selesai`}</p>
+
+        <form class="space-y-3" onsubmit={submitRating} novalidate>
+          <h3 class="font-semibold">Beri Rating</h3>
+          <StarRating bind:value={rating} />
+          <label for="rating-comment" class="sr-only">Komentar</label>
+          <textarea name="comment"
+            id="rating-comment"
+            rows="3"
+            placeholder="Tulis komentar"
+            bind:value={$comment}
+            class="w-full rounded-xl border border-slate-300 px-4 py-3"
+          ></textarea>
+          <button
+            type="submit"
+            disabled={$isRating}
+            class="rounded-xl bg-indigo-600 px-4 py-2 font-semibold text-white disabled:opacity-60"
+          >
+            Kirim Rating
+          </button>
+        </form>
       </section>
     {/if}
-  </article>
+
+    <section class="space-y-4 rounded-2xl bg-white p-6 shadow-sm">
+      <div class="flex items-center justify-between">
+        <h2 class="text-lg font-bold">{`Materi (${$course.total_contents})`}</h2>
+        {#if role === "owner"}
+          <button type="button" onclick={openAddContent} class="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 font-semibold text-white">
+            <Plus class="h-4 w-4" /> Tambah Materi
+          </button>
+        {/if}
+      </div>
+      <ul class="divide-y divide-slate-100">
+        {#each $course.contents as item (item.id)}
+          <li class="flex items-center justify-between gap-3 py-3">
+            <div class="flex items-center gap-3">
+              {#if role === "student"}
+                {#if item.my_status_finished}
+                  <Check class="h-5 w-5 text-emerald-600" />
+                {:else}
+                  <Circle class="h-5 w-5 text-slate-300" />
+                {/if}
+              {:else}
+                <Video class="h-5 w-5 text-slate-400" />
+              {/if}
+              {#if role === "guest"}
+                <span>{item.title}</span>
+              {:else}
+                <a href={`/courses/${$course.id}/contents/${item.id}`} class="font-medium hover:text-indigo-600">
+                  {item.title}
+                </a>
+              {/if}
+            </div>
+            {#if role === "owner"}
+              <div class="flex gap-2">
+                <button type="button" aria-label={`Ubah materi ${item.title}`} onclick={() => openEditContent(item)}>
+                  <Pencil class="h-4 w-4" />
+                </button>
+                <button type="button" aria-label={`Hapus materi ${item.title}`} onclick={() => deleteContent(item)}>
+                  <Trash2 class="h-4 w-4 text-rose-700" />
+                </button>
+              </div>
+            {/if}
+          </li>
+        {:else}
+          <li class="py-3 text-slate-600">Belum ada materi.</li>
+        {/each}
+      </ul>
+    </section>
+
+    <section class="space-y-4 rounded-2xl bg-white p-6 shadow-sm">
+      <h2 class="text-lg font-bold">Rating Peserta</h2>
+      <ul class="space-y-3">
+        {#each $course.ratings as item}
+          <li>
+            <p class="font-semibold">{`${item.name} · ${item.ratings}/5`}</p>
+            <p class="text-sm text-slate-600">{item.comment}</p>
+          </li>
+        {:else}
+          <li class="text-slate-600">Belum ada rating.</li>
+        {/each}
+      </ul>
+    </section>
+  </div>
 
   {#if showChange}
-    <ChangeModal course={$course} onclose={() => (showChange = false)} />
+    <ChangeModal course={$course} onClose={closeModals} onSaved={reload} />
   {/if}
   {#if showCover}
-    <ChangeCoverModal {courseId} onclose={() => (showCover = false)} />
+    <ChangeCoverModal courseId={$course.id} onClose={closeModals} onSaved={reload} />
   {/if}
   {#if showContent}
-    <ContentModal {courseId} content={editingContent} onclose={() => (showContent = false)} />
+    <ContentModal courseId={$course.id} content={editingContent} onClose={closeModals} onSaved={reload} />
   {/if}
 {/if}

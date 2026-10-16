@@ -1,83 +1,53 @@
-import { writable } from "svelte/store";
+import { derived, writable } from "svelte/store";
 import {
-  isSuccess,
   getAccessToken,
+  isSuccess,
   putAccessToken,
   removeAccessToken,
-  toResult,
-  type ActionResult,
 } from "../../../helpers/apiHelper";
-import {
-  fetchMe,
-  loginRequest,
-  registerRequest,
-  type LoginInput,
-  type RegisterInput,
-  type User,
-} from "../api/authApi";
+import { withFlag } from "../../../helpers/storeHelper";
+import { getMe } from "../../users/api/userApi";
+import { postLogin, postRegister } from "../api/authApi";
 
-export const token = writable<string | null>(null);
-export const profile = writable<User | null>(null);
-export const isLoggedIn = writable(false);
-export const authLoading = writable(false);
-export const sessionReady = writable(false);
+export const authToken = writable<string | null>(getAccessToken());
+export const authProfile = writable<User | null>(null);
+export const isAuthLoading = writable(false);
 
-/** Memulihkan sesi dari token yang tersimpan di localStorage. */
-export async function restoreSession(): Promise<void> {
-  const saved = getAccessToken();
-  if (saved) {
-    const me = await fetchMe();
-    if (isSuccess(me)) {
-      token.set(saved);
-      profile.set(me.data.user);
-      isLoggedIn.set(true);
-    } else {
-      removeAccessToken();
-    }
-  }
-  sessionReady.set(true);
-}
-
-export async function login(input: LoginInput): Promise<ActionResult> {
-  authLoading.set(true);
-  const response = await loginRequest(input);
-  if (!isSuccess(response)) {
-    authLoading.set(false);
-    return toResult(response);
-  }
-
-  putAccessToken(response.data.token);
-  const me = await fetchMe();
-  authLoading.set(false);
-  if (!isSuccess(me)) {
-    removeAccessToken();
-    return toResult(me);
-  }
-
-  token.set(response.data.token);
-  profile.set(me.data.user);
-  isLoggedIn.set(true);
-  return toResult(response);
-}
-
-export async function register(input: RegisterInput): Promise<ActionResult> {
-  authLoading.set(true);
-  const response = await registerRequest(input);
-  authLoading.set(false);
-  return toResult(response);
-}
-
-/** Memuat ulang profil setelah data pengguna diubah. */
-export async function refreshProfile(): Promise<void> {
-  const me = await fetchMe();
-  if (isSuccess(me)) {
-    profile.set(me.data.user);
-  }
-}
+export const isLogin = derived(authToken, ($token) => $token !== null);
+export const isSessionReady = derived(
+  [authToken, authProfile],
+  ([$token, $profile]) => Boolean($token && $profile),
+);
 
 export function logout(): void {
   removeAccessToken();
-  token.set(null);
-  profile.set(null);
-  isLoggedIn.set(false);
+  authToken.set(null);
+  authProfile.set(null);
+}
+
+/** Memuat profil; bila token ditolak server, sesi dibersihkan. */
+export async function loadProfile(): Promise<boolean> {
+  const response = await getMe();
+  if (isSuccess(response)) {
+    authProfile.set(response.data.user);
+    return true;
+  }
+  logout();
+  return false;
+}
+
+export function login(email: string, password: string) {
+  return withFlag(isAuthLoading, async () => {
+    const response = await postLogin(email, password);
+    if (isSuccess(response)) {
+      putAccessToken(response.data.token);
+      authToken.set(response.data.token);
+      await loadProfile();
+    }
+    return response;
+  });
+}
+
+export function register(name: string, email: string, password: string) {
+  return withFlag(isAuthLoading, () => postRegister(name, email, password));
 }

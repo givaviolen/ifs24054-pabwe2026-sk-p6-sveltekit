@@ -1,153 +1,102 @@
 import { screen, waitFor } from "@testing-library/svelte";
 import Swal from "sweetalert2";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  click,
-  deferred,
-  fail,
-  makeContent,
-  makeCourse,
-  ok,
-  renderWithProviders,
-  typeInto,
-} from "../../../test-utils";
-import * as api from "../api/courseApi";
+import { describe, expect, it, vi } from "vitest";
+import { makeCourse, ok, renderWithProviders, submitForm, typeInto, fail } from "../../../test-utils";
+import { deleteAllCourses, getCourses, postCourse } from "../api/courseApi";
 import HomePage from "./HomePage.svelte";
 
 vi.mock("../api/courseApi");
 
-const fire = Swal.fire as unknown as ReturnType<typeof vi.fn>;
+const list = [
+  makeCourse({ id: 1, title: "Svelte Dasar", description: "Belajar komponen" }),
+  makeCourse({ id: 2, title: "Angular Lanjut", description: "Sinyal dan router" }),
+];
 
-const mine = makeCourse({
-  id: "c1",
-  user_id: "u1",
-  title: "Svelte Dasar",
-  cover: "https://img.test/c1.png",
-  students: [{ id: "u2" }],
-  contents: [makeContent()],
-  ratings: [{ user_id: "u2", rating: 4 }],
-});
-const other = makeCourse({ id: "c2", user_id: "u9", title: "Angular Lanjut" });
+function mockList() {
+  vi.mocked(getCourses).mockResolvedValue(ok({ courses: list }));
+}
 
-beforeEach(() => {
-  vi.mocked(api.getCourses).mockResolvedValue(ok({ courses: [mine, other] }));
-});
-
-describe("HomePage - daftar", () => {
-  it("menampilkan status memuat lalu daftar kursus", async () => {
-    const pending = deferred();
-    vi.mocked(api.getCourses).mockReturnValue(pending.promise);
+describe("HomePage", () => {
+  it("menampilkan status memuat", async () => {
+    vi.mocked(getCourses).mockReturnValue(new Promise(() => {}));
     renderWithProviders(HomePage);
-
     expect(await screen.findByText("Memuat kursus...")).toBeInTheDocument();
-
-    pending.resolve(ok({ courses: [mine, other] }));
-    expect(await screen.findByText("Svelte Dasar")).toBeInTheDocument();
-    expect(screen.getByText("Angular Lanjut")).toBeInTheDocument();
-    expect(screen.getByRole("img", { name: "Sampul Svelte Dasar" })).toHaveAttribute("src", "https://img.test/c1.png");
-    expect(screen.getByRole("link", { name: "Svelte Dasar" })).toHaveAttribute("href", "/courses/c1");
   });
 
   it("menampilkan pesan kosong bila tidak ada kursus", async () => {
-    vi.mocked(api.getCourses).mockResolvedValue(ok({ courses: [] }));
+    vi.mocked(getCourses).mockResolvedValue(fail());
     renderWithProviders(HomePage);
-    expect(await screen.findByText(/Belum ada kursus yang cocok/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Hapus semua/ })).not.toBeInTheDocument();
+    expect(await screen.findByText("Kursus tidak ditemukan.")).toBeInTheDocument();
+    expect(getCourses).toHaveBeenCalledWith(false);
   });
 
-  it("hanya menampilkan tombol hapus untuk kursus milik sendiri", async () => {
+  it("menampilkan daftar dan menyaring berdasarkan judul atau deskripsi", async () => {
+    mockList();
     renderWithProviders(HomePage);
-    await screen.findByText("Svelte Dasar");
-    expect(screen.getByRole("button", { name: "Hapus Svelte Dasar" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Hapus Angular Lanjut" })).not.toBeInTheDocument();
-  });
-});
-
-describe("HomePage - pencarian dan filter", () => {
-  it("menyaring berdasarkan judul", async () => {
-    renderWithProviders(HomePage);
-    await screen.findByText("Svelte Dasar");
-
-    await typeInto("Cari kursus", "angular");
+    expect(await screen.findByText("Svelte Dasar")).toBeInTheDocument();
     expect(screen.getByText("Angular Lanjut")).toBeInTheDocument();
-    expect(screen.queryByText("Svelte Dasar")).not.toBeInTheDocument();
-  });
 
-  it("menampilkan hanya kursus milik saya", async () => {
-    renderWithProviders(HomePage);
-    await screen.findByText("Angular Lanjut");
-
-    await click(screen.getByLabelText("Hanya milik saya"));
+    const search = screen.getByLabelText("Cari kursus");
+    await typeInto(search, "svelte");
     expect(screen.queryByText("Angular Lanjut")).not.toBeInTheDocument();
-    expect(screen.getByText("Svelte Dasar")).toBeInTheDocument();
-  });
-});
 
-describe("HomePage - hapus", () => {
-  it("menghapus satu kursus setelah dikonfirmasi", async () => {
-    vi.mocked(api.deleteCourse).mockResolvedValue(ok(null, "Kursus dihapus"));
-    renderWithProviders(HomePage);
-    await screen.findByText("Svelte Dasar");
+    await typeInto(search, "router");
+    expect(screen.queryByText("Svelte Dasar")).not.toBeInTheDocument();
+    expect(screen.getByText("Angular Lanjut")).toBeInTheDocument();
 
-    await click(screen.getByRole("button", { name: "Hapus Svelte Dasar" }));
-
-    await waitFor(() => expect(screen.queryByText("Svelte Dasar")).not.toBeInTheDocument());
-    expect(api.deleteCourse).toHaveBeenCalledWith("c1");
+    await typeInto(search, "zzz");
+    expect(screen.getByText("Kursus tidak ditemukan.")).toBeInTheDocument();
   });
 
-  it("tidak menghapus bila konfirmasi dibatalkan", async () => {
-    fire.mockResolvedValueOnce({ isConfirmed: false });
+  it("filter 'milik saya' memuat ulang daftar", async () => {
+    mockList();
     renderWithProviders(HomePage);
     await screen.findByText("Svelte Dasar");
-
-    await click(screen.getByRole("button", { name: "Hapus Svelte Dasar" }));
-    await waitFor(() => expect(fire).toHaveBeenCalled());
-    expect(api.deleteCourse).not.toHaveBeenCalled();
+    screen.getByLabelText("Kursus milik saya").click();
+    await waitFor(() => expect(getCourses).toHaveBeenLastCalledWith(true));
   });
 
-  it("menghapus semua kursus milik sendiri setelah dikonfirmasi", async () => {
-    vi.mocked(api.deleteAllCourses).mockResolvedValue(ok(null, "Semua dihapus"));
-    renderWithProviders(HomePage);
+  it("menambah kursus lewat modal lalu memuat ulang daftar", async () => {
+    mockList();
+    vi.mocked(postCourse).mockResolvedValue(ok());
+    const { container } = renderWithProviders(HomePage);
     await screen.findByText("Svelte Dasar");
 
-    await click(screen.getByRole("button", { name: /Hapus semua milik saya/ }));
+    screen.getByRole("button", { name: "Tambah Kursus" }).click();
+    expect(await screen.findByRole("dialog", { name: "Tambah Kursus" })).toBeInTheDocument();
 
-    await waitFor(() => expect(api.deleteAllCourses).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(screen.queryByText("Svelte Dasar")).not.toBeInTheDocument());
+    // menutup modal
+    screen.getByRole("button", { name: "Tutup" }).click();
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+    // membuka lagi dan menyimpan
+    screen.getByRole("button", { name: "Tambah Kursus" }).click();
+    await screen.findByRole("dialog");
+    await typeInto(screen.getByLabelText("Judul"), "Kursus X");
+    await typeInto(screen.getByLabelText("Deskripsi"), "Deskripsi X");
+    await submitForm(container);
+    await waitFor(() => expect(postCourse).toHaveBeenCalledWith("Kursus X", "Deskripsi X"));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(getCourses).toHaveBeenCalledTimes(2);
   });
 
-  it("tidak menghapus semua bila konfirmasi dibatalkan", async () => {
-    fire.mockResolvedValueOnce({ isConfirmed: false });
+  it("hapus semua: batal tidak memanggil API", async () => {
+    mockList();
     renderWithProviders(HomePage);
     await screen.findByText("Svelte Dasar");
-
-    await click(screen.getByRole("button", { name: /Hapus semua milik saya/ }));
-    await waitFor(() => expect(fire).toHaveBeenCalled());
-    expect(api.deleteAllCourses).not.toHaveBeenCalled();
+    vi.mocked(Swal.fire).mockResolvedValueOnce({ isConfirmed: false } as never);
+    screen.getByRole("button", { name: "Hapus Semua Milikku" }).click();
+    await waitFor(() => expect(Swal.fire).toHaveBeenCalled());
+    expect(deleteAllCourses).not.toHaveBeenCalled();
   });
 
-  it("menampilkan galat bila penghapusan gagal", async () => {
-    vi.mocked(api.deleteCourse).mockResolvedValue(fail("Tidak boleh dihapus"));
+  it("hapus semua: konfirmasi memanggil API lalu memuat ulang", async () => {
+    mockList();
+    vi.mocked(deleteAllCourses).mockResolvedValue(ok());
     renderWithProviders(HomePage);
     await screen.findByText("Svelte Dasar");
-
-    await click(screen.getByRole("button", { name: "Hapus Svelte Dasar" }));
-    await waitFor(() =>
-      expect(fire).toHaveBeenCalledWith(expect.objectContaining({ icon: "error" }))
-    );
-    expect(screen.getByText("Svelte Dasar")).toBeInTheDocument();
-  });
-});
-
-describe("HomePage - tambah", () => {
-  it("membuka dan menutup modal tambah kursus", async () => {
-    renderWithProviders(HomePage);
-    await screen.findByText("Svelte Dasar");
-
-    await click(screen.getByRole("button", { name: /Tambah kursus/ }));
-    expect(screen.getByRole("dialog", { name: "Tambah Kursus" })).toBeInTheDocument();
-
-    await click(screen.getByRole("button", { name: "Batal" }));
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    screen.getByRole("button", { name: "Hapus Semua Milikku" }).click();
+    await waitFor(() => expect(deleteAllCourses).toHaveBeenCalledOnce());
+    await waitFor(() => expect(getCourses).toHaveBeenCalledTimes(2));
   });
 });

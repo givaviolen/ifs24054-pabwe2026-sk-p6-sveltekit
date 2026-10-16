@@ -1,42 +1,60 @@
 <script lang="ts">
   import { useInput } from "../../../hooks/useInput";
-  import { notify, showWarningDialog } from "../../../helpers/toolsHelper";
-  import MarkdownEditor from "../../common/components/MarkdownEditor.svelte";
-  import Modal from "../../common/components/Modal.svelte";
-  import { createCourse, mutating } from "../states/coursesStore";
+  import { runWithFeedback } from "../../../helpers/toolsHelper";
+  import ModalShell from "../components/ModalShell.svelte";
+  import { addCourse, isAdding } from "../states/coursesStore";
 
-  let { onclose }: { onclose: () => void } = $props();
+  let { onClose, onSaved }: { onClose: () => void; onSaved: () => unknown } =
+    $props();
 
   const { value: title } = useInput("");
-  let description = $state("");
+  const { value: description } = useInput("");
 
   async function handleSubmit(event: SubmitEvent) {
     event.preventDefault();
-    if (!$title.trim()) {
-      await showWarningDialog("Judul kursus wajib diisi.");
-      return;
-    }
-    if (await notify(await createCourse({ title: $title.trim(), description }))) {
-      onclose();
-    }
+    await runWithFeedback(
+      () => addCourse($title, $description),
+      () => {
+        onSaved();
+        onClose();
+      },
+    );
   }
 </script>
 
-<Modal title="Tambah Kursus" {onclose}>
-  <form class="space-y-4" data-testid="add-course-form" onsubmit={handleSubmit}>
+<ModalShell title="Tambah Kursus" {onClose}>
+  <form class="space-y-4" onsubmit={handleSubmit} novalidate>
     <div>
       <label for="add-title" class="mb-1 block text-sm font-medium">Judul</label>
-      <input id="add-title" type="text" bind:value={$title} class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200" />
+      <input name="title"
+        id="add-title"
+        type="text"
+        bind:value={$title}
+        class="w-full rounded-xl border border-slate-300 px-4 py-3"
+      />
     </div>
     <div>
-      <span class="mb-1 block text-sm font-medium">Deskripsi</span>
-      <MarkdownEditor bind:value={description} />
+      <label for="add-description" class="mb-1 block text-sm font-medium">
+        Deskripsi
+      </label>
+      <textarea name="description"
+        id="add-description"
+        rows="4"
+        bind:value={$description}
+        class="w-full rounded-xl border border-slate-300 px-4 py-3"
+      ></textarea>
     </div>
-    <div class="flex justify-end gap-2">
-      <button type="button" class="rounded-lg px-4 py-2 text-sm font-medium hover:bg-slate-100" onclick={onclose}>Batal</button>
-      <button type="submit" disabled={$mutating.add} class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60">
-        {$mutating.add ? "Menyimpan..." : "Simpan"}
+    <div class="flex justify-end gap-3">
+      <button type="button" onclick={onClose} class="rounded-xl px-4 py-2">
+        Batal
+      </button>
+      <button
+        type="submit"
+        disabled={$isAdding}
+        class="rounded-xl bg-indigo-600 px-5 py-2 font-semibold text-white disabled:opacity-60"
+      >
+        Simpan
       </button>
     </div>
   </form>
-</Modal>
+</ModalShell>

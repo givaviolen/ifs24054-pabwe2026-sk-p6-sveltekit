@@ -1,106 +1,58 @@
-export interface ApiResponse<T = any> {
-  status: string;
-  message: string;
-  data: T;
+const TOKEN_KEY = "access_token";
+
+// Permintaan dikirim ke proxy same-origin (src/routes/api/[...path]/+server.ts),
+// bukan langsung ke Delcom Open API, sehingga browser tidak melakukan CORS.
+export const API_PATH = "/api";
+
+export function getAccessToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY);
 }
 
-export interface ActionResult {
-  ok: boolean;
-  message: string;
+export function putAccessToken(token: string): void {
+  localStorage.setItem(TOKEN_KEY, token);
 }
 
-export interface ApiOptions {
-  method?: string;
-  body?: unknown;
-  form?: FormData;
-  auth?: boolean;
+export function removeAccessToken(): void {
+  localStorage.removeItem(TOKEN_KEY);
 }
 
-const ACCESS_TOKEN_KEY = "access_token";
-
-// Jalur utama: proxy same-origin (src/routes/api/[...path]/+server.ts),
-// sehingga browser tidak melakukan CORS ke Delcom Open API.
-const API_PATH = "/api";
-
-// Status gerbang yang menandakan server di belakang proxy sedang bermasalah.
-const GATEWAY_ERRORS = [502, 503, 504];
-
-export const getAccessToken = (): string | null =>
-  localStorage.getItem(ACCESS_TOKEN_KEY);
-
-export const putAccessToken = (token: string): void =>
-  localStorage.setItem(ACCESS_TOKEN_KEY, token);
-
-export const removeAccessToken = (): void =>
-  localStorage.removeItem(ACCESS_TOKEN_KEY);
-
-/** Respons API dianggap berhasil bila status bernilai "success". */
-export const isSuccess = (response: ApiResponse): boolean =>
-  response.status === "success";
-
-export const toResult = (response: ApiResponse): ActionResult => ({
-  ok: isSuccess(response),
-  message: response.message,
-});
-
-interface Attempt<T> {
-  data: ApiResponse<T>;
-  gatewayError: boolean;
-}
-
-async function send<T>(url: string, init: RequestInit): Promise<Attempt<T>> {
-  const response = await fetch(url, init);
-  return {
-    data: await response.json(),
-    gatewayError: GATEWAY_ERRORS.includes(response.status),
-  };
+export function isSuccess(response: ApiResponse): boolean {
+  return response.status === "success";
 }
 
 /**
- * Pembungkus fetch ke Delcom Open API.
- * Header otorisasi: Authorization: Bearer <token>.
- * Permintaan dicoba lewat proxy `/api` lebih dulu; bila proxy gagal
- * (galat jaringan, balasan bukan JSON, atau status 502/503/504),
- * permintaan diulang langsung ke Delcom Open API.
+ * Pembungkus fetch ke Delcom Open API (lewat proxy same-origin `/api`).
+ * - header `Authorization: Bearer <token>` dipasang bila token tersedia
+ * - FormData dikirim apa adanya, objek lain dikirim sebagai JSON
+ * - kegagalan jaringan diubah menjadi respons `fail`
  */
-export async function apiFetch<T = any>(
+export async function apiRequest<T = any>(
+  method: string,
   path: string,
-  options: ApiOptions = {}
+  payload?: FormData | object,
 ): Promise<ApiResponse<T>> {
-  const { method = "GET", body, form, auth = true } = options;
   const headers: Record<string, string> = {};
   const token = getAccessToken();
-
-  if (auth && token) {
+  if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  let payload: BodyInit | undefined;
-  if (form) {
-    payload = form;
-  } else if (body !== undefined) {
+  let body: FormData | string | undefined;
+  if (payload instanceof FormData) {
+    body = payload;
+  } else if (payload) {
     headers["Content-Type"] = "application/json";
-    payload = JSON.stringify(body);
-  }
-
-  const init: RequestInit = { method, headers, body: payload };
-
-  try {
-    const proxied = await send<T>(`${API_PATH}${path}`, init);
-    if (!proxied.gatewayError) {
-      return proxied.data;
-    }
-  } catch {
-    // Proxy tidak tersedia atau membalas non-JSON: lanjut ke jalur cadangan.
+    body = JSON.stringify(payload);
   }
 
   try {
-    return (await send<T>(`${DELCOM_BASEURL}${path}`, init)).data;
+    const response = await fetch(`${API_PATH}${path}`, {
+      method,
+      headers,
+      body,
+    });
+    return await response.json();
   } catch {
-    return {
-      status: "error",
-      message: "Tidak dapat terhubung ke server. Periksa koneksi Anda.",
-      data: null as T,
-    };
+    return { status: "fail", message: "Tidak dapat terhubung ke server." };
   }
 }

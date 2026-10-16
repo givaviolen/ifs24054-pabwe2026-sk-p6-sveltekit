@@ -1,96 +1,112 @@
-import { page } from "$app/state";
-import { render, screen } from "@testing-library/svelte";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { makeContent, makeCourse, ok, renderWithProviders, resetStores, snippetOf, testUser } from "../test-utils";
-import { fetchMe } from "../features/auth/api/authApi";
-import * as courseApi from "../features/courses/api/courseApi";
-import { fetchUsers } from "../features/users/api/userApi";
+import { goto } from "$app/navigation";
+import { screen, waitFor } from "@testing-library/svelte";
+import { createRawSnippet } from "svelte";
+import { describe, expect, it, vi } from "vitest";
+import { getContent, getCourse, getCourses } from "../features/courses/api/courseApi";
+import { getUsers } from "../features/users/api/userApi";
+import { makeContent, makeDetail, makeUser, ok, renderWithProviders } from "../test-utils";
 import { ssr } from "./+layout";
+import { fallback as apiProxy } from "./api/[...path]/+server";
+import ErrorPage from "./+error.svelte";
+import RootLayout from "./+layout.svelte";
+import HomeRoute from "./+page.svelte";
 import AuthLayoutRoute from "./auth/+layout.svelte";
 import LoginRoute from "./auth/login/+page.svelte";
 import RegisterRoute from "./auth/register/+page.svelte";
-import ContentRoute from "./courses/[courseId]/contents/[contentId]/+page.svelte";
 import DetailRoute from "./courses/[courseId]/+page.svelte";
-import ErrorRoute from "./+error.svelte";
-import HomeRoute from "./+page.svelte";
+import ContentRoute from "./courses/[courseId]/contents/[contentId]/+page.svelte";
 import ProfileRoute from "./profile/+page.svelte";
 import UsersRoute from "./users/+page.svelte";
 
-vi.mock("../features/auth/api/authApi", () => ({
-  fetchMe: vi.fn(),
-  loginRequest: vi.fn(),
-  registerRequest: vi.fn(),
-}));
 vi.mock("../features/courses/api/courseApi");
-vi.mock("../features/users/api/userApi", () => ({
-  fetchUsers: vi.fn(),
-  postPhoto: vi.fn(),
-  putPassword: vi.fn(),
-  putProfile: vi.fn(),
-}));
+vi.mock("../features/users/api/userApi");
 
-beforeEach(() => {
-  vi.mocked(fetchMe).mockResolvedValue(ok({ user: testUser }));
-});
+const children = createRawSnippet(() => ({ render: () => "<p>isi rute</p>" }));
+const session = { token: "t", profile: makeUser() };
 
-describe("konfigurasi rute", () => {
-  it("mematikan render di server", () => {
+describe("rute", () => {
+  it("+layout.ts menonaktifkan SSR", () => {
     expect(ssr).toBe(false);
   });
-});
 
-describe("rute halaman", () => {
-  it("/ menampilkan daftar kursus", async () => {
-    vi.mocked(courseApi.getCourses).mockResolvedValue(ok({ courses: [makeCourse({ title: "Kursus Beranda" })] }));
+  it("api/[...path]/+server.ts meneruskan permintaan ke proxy Delcom", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response("{}", { headers: { "content-type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const request = new Request("http://localhost/api/courses?is_me=1");
+
+    const response = await apiProxy({
+      request,
+      params: { path: "courses" },
+      url: new URL(request.url),
+    } as never);
+
+    expect(fetchMock.mock.calls[0][0]).toBe(`${DELCOM_BASEURL}/courses?is_me=1`);
+    expect(response.status).toBe(200);
+  });
+
+  it("+layout.svelte: rute /auth merender anak langsung", () => {
+    renderWithProviders(RootLayout, { path: "/auth/login", props: { children } });
+    expect(screen.getByText("isi rute")).toBeInTheDocument();
+    expect(goto).not.toHaveBeenCalled();
+  });
+
+  it("+layout.svelte: rute lain dibungkus CourseLayout", async () => {
+    renderWithProviders(RootLayout, { path: "/", props: { children }, ...session });
+    expect(screen.getByText("isi rute")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Semua Kursus" })).toBeInTheDocument();
+  });
+
+  it("+layout.svelte: tanpa sesi diarahkan ke halaman masuk", async () => {
+    renderWithProviders(RootLayout, { path: "/", props: { children } });
+    await waitFor(() => expect(goto).toHaveBeenCalledWith("/auth/login"));
+    expect(screen.queryByText("isi rute")).not.toBeInTheDocument();
+  });
+
+  it("+page.svelte menampilkan daftar kursus", async () => {
+    vi.mocked(getCourses).mockResolvedValue(ok({ courses: [] }));
     renderWithProviders(HomeRoute);
-    expect(await screen.findByText("Kursus Beranda")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Semua Kursus" })).toBeInTheDocument();
   });
 
-  it("/auth/login dan /auth/register menampilkan formulir", () => {
-    resetStores();
-    const login = render(LoginRoute);
-    expect(screen.getByRole("heading", { name: "Masuk ke akunmu" })).toBeInTheDocument();
-    login.unmount();
-    render(RegisterRoute);
-    expect(screen.getByRole("heading", { name: "Buat akun baru" })).toBeInTheDocument();
+  it("+error.svelte menampilkan halaman 404", () => {
+    renderWithProviders(ErrorPage);
+    expect(screen.getByText("404")).toBeInTheDocument();
   });
 
-  it("/auth memakai layout autentikasi", () => {
-    resetStores();
-    render(AuthLayoutRoute, { props: { children: snippetOf("<p>Anak rute auth</p>") } });
-    expect(screen.getByText("Anak rute auth")).toBeInTheDocument();
-    expect(screen.getByText(/Belajar lewat kursus video/)).toBeInTheDocument();
+  it("auth/+layout.svelte memakai AuthLayout", () => {
+    renderWithProviders(AuthLayoutRoute, { props: { children } });
+    expect(screen.getByText("isi rute")).toBeInTheDocument();
+    expect(screen.getByText(/kumpulan kursus daring/i)).toBeInTheDocument();
   });
 
-  it("/courses/[courseId] membaca parameter dari page", async () => {
-    (page as any).params = { courseId: "c7" };
-    vi.mocked(courseApi.getCourse).mockResolvedValue(ok({ course: makeCourse({ id: "c7", title: "Kursus Tujuh" }) }));
-    renderWithProviders(DetailRoute);
-    expect(await screen.findByRole("heading", { name: "Kursus Tujuh" })).toBeInTheDocument();
-    expect(courseApi.getCourse).toHaveBeenCalledWith("c7");
+  it("halaman masuk dan daftar", () => {
+    renderWithProviders(LoginRoute);
+    expect(screen.getByRole("heading", { name: "Masuk" })).toBeInTheDocument();
+    renderWithProviders(RegisterRoute);
+    expect(screen.getByRole("heading", { name: "Daftar" })).toBeInTheDocument();
   });
 
-  it("/courses/[courseId]/contents/[contentId] membaca kedua parameter", async () => {
-    (page as any).params = { courseId: "c7", contentId: "ct9" };
-    vi.mocked(courseApi.getContent).mockResolvedValue(ok({ course_content: makeContent({ id: "ct9", title: "Materi Sembilan" }) }));
-    renderWithProviders(ContentRoute);
-    expect(await screen.findByRole("heading", { name: "Materi Sembilan" })).toBeInTheDocument();
-    expect(courseApi.getContent).toHaveBeenCalledWith("ct9");
+  it("courses/[courseId] membaca parameter rute", async () => {
+    vi.mocked(getCourse).mockResolvedValue(ok({ course: makeDetail() }));
+    renderWithProviders(DetailRoute, { ...session, params: { courseId: "10" } });
+    expect(await screen.findByRole("heading", { name: "Belajar Svelte" })).toBeInTheDocument();
+    expect(getCourse).toHaveBeenCalledWith("10");
   });
 
-  it("/users menampilkan daftar pengguna", async () => {
-    vi.mocked(fetchUsers).mockResolvedValue(ok({ users: [{ ...testUser, name: "Pengguna Uji" }] }));
+  it("courses/[courseId]/contents/[contentId] membaca parameter rute", async () => {
+    vi.mocked(getContent).mockResolvedValue(ok({ course_content: makeContent() }));
+    renderWithProviders(ContentRoute, { params: { courseId: "10", contentId: "100" } });
+    expect(await screen.findByRole("heading", { name: "Pengantar" })).toBeInTheDocument();
+    expect(getContent).toHaveBeenCalledWith("100");
+  });
+
+  it("halaman pengguna dan profil", async () => {
+    vi.mocked(getUsers).mockResolvedValue(ok({ users: [makeUser()] }));
     renderWithProviders(UsersRoute);
-    expect(await screen.findByText("Pengguna Uji")).toBeInTheDocument();
-  });
-
-  it("/profile menampilkan profil", () => {
-    renderWithProviders(ProfileRoute);
-    expect(screen.getByRole("heading", { name: "Ayu Lestari" })).toBeInTheDocument();
-  });
-
-  it("+error.svelte menampilkan halaman tidak ditemukan", () => {
-    render(ErrorRoute);
-    expect(screen.getByText("Halaman tidak ditemukan")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Pengguna" })).toBeInTheDocument();
+    renderWithProviders(ProfileRoute, session);
+    expect(screen.getByText("Ubah Kata Sandi", { selector: "h2" })).toBeInTheDocument();
   });
 });

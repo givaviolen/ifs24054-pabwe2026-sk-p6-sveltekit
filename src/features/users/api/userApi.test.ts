@@ -1,38 +1,33 @@
 import { describe, expect, it, vi } from "vitest";
-import { apiFetch } from "../../../helpers/apiHelper";
-import { fetchUsers, postPhoto, putPassword, putProfile } from "./userApi";
+import { apiRequest } from "../../../helpers/apiHelper";
+import { getMe, getUsers, postPhoto, putMe, putPassword } from "./userApi";
 
-vi.mock("../../../helpers/apiHelper", () => ({ apiFetch: vi.fn() }));
+vi.mock("../../../helpers/apiHelper");
 
 describe("userApi", () => {
-  it("fetchUsers memanggil GET /users", () => {
-    fetchUsers();
-    expect(apiFetch).toHaveBeenCalledWith("/users");
+  it("memanggil endpoint JSON dengan argumen yang benar", async () => {
+    await getUsers();
+    await getMe();
+    await putMe("Budi", "b@d.id");
+    await putPassword("lama", "baru", "baru");
+    expect(vi.mocked(apiRequest).mock.calls).toEqual([
+      ["GET", "/users"],
+      ["GET", "/users/me"],
+      ["PUT", "/users/me", { name: "Budi", email: "b@d.id" }],
+      [
+        "PUT",
+        "/users/password",
+        { password: "lama", new_password: "baru", new_password_confirmation: "baru" },
+      ],
+    ]);
   });
 
-  it("putProfile memanggil PUT /users/me", () => {
-    putProfile({ name: "A", email: "a@b.c" });
-    expect(apiFetch).toHaveBeenCalledWith("/users/me", {
-      method: "PUT",
-      body: { name: "A", email: "a@b.c" },
-    });
-  });
-
-  it("postPhoto mengirim FormData berisi berkas foto", () => {
-    const file = new File(["x"], "a.png", { type: "image/png" });
-    postPhoto(file);
-
-    const [path, options] = vi.mocked(apiFetch).mock.calls[0] as [string, any];
-    expect(path).toBe("/users/photo");
-    expect(options.method).toBe("POST");
-    expect(options.form.get("photo")).toBe(file);
-  });
-
-  it("putPassword memanggil PUT /users/password", () => {
-    putPassword({ password: "lama", new_password: "baru" });
-    expect(apiFetch).toHaveBeenCalledWith("/users/password", {
-      method: "PUT",
-      body: { password: "lama", new_password: "baru" },
-    });
+  it("postPhoto mengunggah berkas pada field photo", async () => {
+    const file = new File(["x"], "foto.png");
+    await postPhoto(file);
+    const [method, path, form] = vi.mocked(apiRequest).mock.calls[0];
+    expect(method).toBe("POST");
+    expect(path).toBe("/users/me/photo");
+    expect((form as FormData).get("photo")).toBeInstanceOf(File);
   });
 });

@@ -1,53 +1,51 @@
 import { writable } from "svelte/store";
-import {
-  isSuccess,
-  toResult,
-  type ActionResult,
-  type ApiResponse,
-} from "../../../helpers/apiHelper";
-import type { User } from "../../auth/api/authApi";
-import { refreshProfile } from "../../auth/states/authStore";
-import {
-  fetchUsers,
-  postPhoto,
-  putPassword,
-  putProfile,
-  type PasswordInput,
-  type ProfileInput,
-} from "../api/userApi";
+import { isSuccess } from "../../../helpers/apiHelper";
+import { withFlag } from "../../../helpers/storeHelper";
+import { authProfile, loadProfile } from "../../auth/states/authStore";
+import { getUsers, postPhoto, putMe, putPassword } from "../api/userApi";
 
 export const users = writable<User[]>([]);
-export const usersLoading = writable(false);
-export const profileBusy = writable(false);
+export const isUsersLoading = writable(false);
+export const isProfileSaving = writable(false);
+export const isPhotoSaving = writable(false);
+export const isPasswordSaving = writable(false);
 
-export async function loadUsers(): Promise<ActionResult> {
-  usersLoading.set(true);
-  const response = await fetchUsers();
-  if (isSuccess(response)) {
-    users.set(response.data.users);
-  }
-  usersLoading.set(false);
-  return toResult(response);
+export function loadUsers() {
+  return withFlag(isUsersLoading, async () => {
+    const response = await getUsers();
+    if (isSuccess(response)) {
+      users.set(response.data.users);
+    }
+    return response;
+  });
 }
 
-async function mutateProfile(
-  request: () => Promise<ApiResponse>,
-  refresh: boolean
-): Promise<ActionResult> {
-  profileBusy.set(true);
-  const response = await request();
-  if (isSuccess(response) && refresh) {
-    await refreshProfile();
-  }
-  profileBusy.set(false);
-  return toResult(response);
+export function updateProfile(name: string, email: string) {
+  return withFlag(isProfileSaving, async () => {
+    const response = await putMe(name, email);
+    if (isSuccess(response)) {
+      authProfile.set(response.data.user);
+    }
+    return response;
+  });
 }
 
-export const saveProfile = (input: ProfileInput) =>
-  mutateProfile(() => putProfile(input), true);
+export function updatePhoto(file: File) {
+  return withFlag(isPhotoSaving, async () => {
+    const response = await postPhoto(file);
+    if (isSuccess(response)) {
+      await loadProfile();
+    }
+    return response;
+  });
+}
 
-export const savePhoto = (file: File) =>
-  mutateProfile(() => postPhoto(file), true);
-
-export const savePassword = (input: PasswordInput) =>
-  mutateProfile(() => putPassword(input), false);
+export function updatePassword(
+  password: string,
+  newPassword: string,
+  confirmation: string,
+) {
+  return withFlag(isPasswordSaving, () =>
+    putPassword(password, newPassword, confirmation),
+  );
+}

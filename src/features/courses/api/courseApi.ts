@@ -1,100 +1,77 @@
-import { apiFetch } from "../../../helpers/apiHelper";
+import { apiRequest } from "../../../helpers/apiHelper";
 
-export interface CourseStudent {
-  id: string;
-  name?: string;
-  email?: string;
-  photo?: string | null;
+type Id = number | string;
+
+export function getCourses(onlyMine: boolean) {
+  return apiRequest<{ courses: Course[] }>(
+    "GET",
+    onlyMine ? "/courses?is_me=1" : "/courses",
+  );
 }
 
-export interface CourseRating {
-  id?: string;
-  user_id: string;
-  rating: number;
+export function getCourse(id: Id) {
+  return apiRequest<{ course: CourseDetail }>("GET", `/courses/${id}`);
 }
 
-export interface CourseContent {
-  id: string;
-  course_id?: string;
-  title: string;
-  youtube: string;
-  learned?: boolean;
-  created_at?: string;
+export function postCourse(title: string, description: string) {
+  return apiRequest("POST", "/courses", { title, description });
 }
 
-export interface Course {
-  id: string;
-  user_id: string;
-  title: string;
-  description: string;
-  cover?: string | null;
-  students: CourseStudent[];
-  contents: CourseContent[];
-  ratings: CourseRating[];
-  created_at?: string;
-  updated_at?: string;
-}
-
-export interface CourseInput {
-  title: string;
-  description: string;
-}
-
-export interface ContentInput {
-  title: string;
-  youtube: string;
-}
-
-// ---- Kursus ----
-export const postCourse = (input: CourseInput) =>
-  apiFetch<{ course_id: string }>("/courses", { method: "POST", body: input });
-
-export const postCourseCover = (id: string, file: File) => {
+export function postCover(id: Id, file: File) {
   const form = new FormData();
   form.append("cover", file);
-  return apiFetch(`/courses/${id}/cover`, { method: "POST", form });
-};
+  return apiRequest("POST", `/courses/${id}/cover`, form);
+}
 
-export const putCourse = (id: string, input: CourseInput) =>
-  apiFetch(`/courses/${id}`, { method: "PUT", body: input });
+export function putCourse(id: Id, title: string, description: string) {
+  return apiRequest("PUT", `/courses/${id}`, { title, description });
+}
 
-export const getCourses = () => apiFetch<{ courses: Course[] }>("/courses");
+export function deleteCourse(id: Id) {
+  return apiRequest("DELETE", `/courses/${id}`);
+}
 
-export const getCourse = (id: string) =>
-  apiFetch<{ course: Course }>(`/courses/${id}`);
+export function deleteAllCourses() {
+  return apiRequest("DELETE", "/courses");
+}
 
-export const deleteCourse = (id: string) =>
-  apiFetch(`/courses/${id}`, { method: "DELETE" });
+export function postStudent(id: Id) {
+  return apiRequest("POST", `/courses/${id}/students`);
+}
 
-export const deleteAllCourses = () => apiFetch("/courses", { method: "DELETE" });
+export function deleteStudent(id: Id) {
+  return apiRequest("DELETE", `/courses/${id}/students`);
+}
 
-// ---- Peserta ----
-export const joinCourseRequest = (id: string) =>
-  apiFetch(`/courses/${id}/students`, { method: "POST" });
-
-export const leaveCourseRequest = (id: string) =>
-  apiFetch(`/courses/${id}/students`, { method: "DELETE" });
-
-// ---- Rating (skala 1 sampai 5) ----
-export const postRating = (id: string, rating: number) =>
-  apiFetch(`/courses/${id}/ratings`, { method: "POST", body: { rating } });
-
-// ---- Konten ----
-export const postContent = (courseId: string, input: ContentInput) =>
-  apiFetch(`/courses/${courseId}/contents`, { method: "POST", body: input });
-
-export const putContent = (contentId: string, input: ContentInput) =>
-  apiFetch(`/courses/-/contents/${contentId}`, { method: "PUT", body: input });
-
-export const getContent = (contentId: string) =>
-  apiFetch<{ course_content: CourseContent }>(`/courses/-/contents/${contentId}`);
-
-export const deleteContent = (contentId: string) =>
-  apiFetch(`/courses/-/contents/${contentId}`, { method: "DELETE" });
-
-/** Status belajar: 0 = belum selesai, 1 = selesai. */
-export const putLearned = (contentId: string, status: 0 | 1) =>
-  apiFetch(`/courses/-/contents/${contentId}/learns`, {
-    method: "PUT",
-    body: { status },
+export function putRating(id: Id, ratings: number, comment: string) {
+  return apiRequest("PUT", `/courses/${id}/students/ratings`, {
+    ratings,
+    comment,
   });
+}
+
+export function postContent(courseId: Id, title: string, youtube: string) {
+  return apiRequest("POST", `/courses/${courseId}/contents`, {
+    title,
+    youtube,
+  });
+}
+
+export function getContent(id: Id) {
+  return apiRequest<{ course_content: CourseContent }>(
+    "GET",
+    `/courses/-/contents/${id}`,
+  );
+}
+
+export function putContent(id: Id, title: string, youtube: string) {
+  return apiRequest("PUT", `/courses/-/contents/${id}`, { title, youtube });
+}
+
+export function deleteContent(id: Id) {
+  return apiRequest("DELETE", `/courses/-/contents/${id}`);
+}
+
+export function postLearn(id: Id, status: 0 | 1) {
+  return apiRequest("POST", `/courses/-/contents/${id}/learns`, { status });
+}

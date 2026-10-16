@@ -1,32 +1,54 @@
 <script lang="ts">
+  import { onMount, type Snippet } from "svelte";
   import { goto } from "$app/navigation";
-  import { isLoggedIn, sessionReady } from "../../auth/states/authStore";
-  import Navbar from "../components/Navbar.svelte";
-  import Sidebar from "../components/Sidebar.svelte";
+  import { page } from "$app/state";
+  import {
+    authProfile,
+    authToken,
+    loadProfile,
+    logout,
+  } from "../../auth/states/authStore";
+  import CourseNavbar from "../components/CourseNavbar.svelte";
+  import CourseSidebar from "../components/CourseSidebar.svelte";
 
-  let { children } = $props();
+  let { children }: { children: Snippet } = $props();
+
   let sidebarOpen = $state(false);
 
-  // Pengguna yang belum masuk diarahkan ke halaman login setelah sesi dicek.
+  const toggleSidebar = () => (sidebarOpen = !sidebarOpen);
+  const closeSidebar = () => (sidebarOpen = false);
+
+  // Tanpa token (atau setelah logout) pengguna diarahkan ke halaman masuk.
   $effect(() => {
-    if ($sessionReady && !$isLoggedIn) {
+    if (!$authToken) {
       goto("/auth/login");
+    }
+  });
+
+  onMount(() => {
+    if ($authToken && !$authProfile) {
+      loadProfile();
     }
   });
 </script>
 
-{#if $isLoggedIn}
-  <div class="min-h-screen">
-    <Navbar ontoggle={() => (sidebarOpen = !sidebarOpen)} />
-    <Sidebar open={sidebarOpen} onclose={() => (sidebarOpen = false)} />
-    <main class="pt-16 md:pl-64">
-      <div class="mx-auto max-w-5xl p-4 sm:p-6">
-        {@render children()}
-      </div>
-    </main>
-  </div>
+{#if $authProfile}
+  <CourseNavbar
+    profile={$authProfile}
+    onToggleSidebar={toggleSidebar}
+    onLogout={logout}
+  />
+  <CourseSidebar
+    open={sidebarOpen}
+    currentPath={page.url.pathname}
+    onClose={closeSidebar}
+  />
+  <main class="p-6 lg:ml-64">
+    {@render children()}
+  </main>
 {:else}
-  <main class="flex min-h-screen items-center justify-center text-slate-500" aria-live="polite">
-    <h1 class="text-base font-normal">Memuat sesi...</h1>
+  <main class="p-6">
+    <h1 class="sr-only">Delcom Courses</h1>
+    <p class="text-slate-600">Memuat...</p>
   </main>
 {/if}

@@ -6,7 +6,6 @@ out
 dist
 build
 .svelte-kit
-.vercel
 *.tgz
 
 # code coverage

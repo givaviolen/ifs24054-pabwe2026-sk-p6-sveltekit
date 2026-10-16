@@ -1,13 +1,10 @@
-import { writable, type Writable } from "svelte/store";
+import { writable } from "svelte/store";
 
-export interface UseInput {
-  value: Writable<string>;
-  reset: () => void;
-}
-
-/** Hook input formulir berbasis Svelte store. */
-export function useInput(initialValue: string): UseInput {
-  const value = writable(initialValue);
-  const reset = () => value.set(initialValue);
-  return { value, reset };
+/** Hook input formulir: store nilai + fungsi reset ke nilai awal. */
+export function useInput(initial: string) {
+  const value = writable(initial);
+  return {
+    value,
+    reset: () => value.set(initial),
+  };
 }

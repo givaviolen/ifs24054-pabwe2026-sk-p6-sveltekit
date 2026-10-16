@@ -10,6 +10,4 @@
   <title>Materi | Delcom Courses</title>
 </svelte:head>
 
-{#key contentId}
-  <ContentPage {courseId} {contentId} />
-{/key}
+<ContentPage {courseId} {contentId} />

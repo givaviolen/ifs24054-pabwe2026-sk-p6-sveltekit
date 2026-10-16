@@ -3,14 +3,12 @@ import { describe, expect, it } from "vitest";
 import { useInput } from "./useInput";
 
 describe("useInput", () => {
-  it("menyimpan nilai awal, memperbarui, dan mengatur ulang", () => {
-    const { value, reset } = useInput("awal");
-    expect(get(value)).toBe("awal");
-
-    value.set("baru");
-    expect(get(value)).toBe("baru");
-
-    reset();
-    expect(get(value)).toBe("awal");
+  it("menyimpan nilai dan bisa direset ke nilai awal", () => {
+    const input = useInput("awal");
+    expect(get(input.value)).toBe("awal");
+    input.value.set("baru");
+    expect(get(input.value)).toBe("baru");
+    input.reset();
+    expect(get(input.value)).toBe("awal");
   });
 });

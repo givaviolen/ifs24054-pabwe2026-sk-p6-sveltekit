@@ -1,150 +1,72 @@
 import { fireEvent, screen, waitFor } from "@testing-library/svelte";
 import Swal from "sweetalert2";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  fail,
-  makeFile,
-  ok,
-  renderWithProviders,
-  submitForm,
-  testUser,
-  typeInto,
-} from "../../../test-utils";
-import { fetchMe } from "../../auth/api/authApi";
-import { postPhoto, putPassword, putProfile } from "../api/userApi";
+import { describe, expect, it, vi } from "vitest";
+import { fail, makeUser, ok, renderWithProviders, submitForm, typeInto } from "../../../test-utils";
+import { getMe, postPhoto, putMe, putPassword } from "../api/userApi";
 import ProfilePage from "./ProfilePage.svelte";
 
-vi.mock("../../auth/api/authApi", () => ({
-  fetchMe: vi.fn(),
-  loginRequest: vi.fn(),
-  registerRequest: vi.fn(),
-}));
-vi.mock("../api/userApi", () => ({
-  fetchUsers: vi.fn(),
-  postPhoto: vi.fn(),
-  putPassword: vi.fn(),
-  putProfile: vi.fn(),
-}));
+vi.mock("../api/userApi");
 
-const fire = Swal.fire as unknown as ReturnType<typeof vi.fn>;
-const warned = () =>
-  expect(fire).toHaveBeenCalledWith(expect.objectContaining({ icon: "warning" }));
+const profile = makeUser({ name: "Budi", email: "budi@del.ac.id" });
 
-beforeEach(() => {
-  vi.mocked(fetchMe).mockResolvedValue(ok({ user: { ...testUser, name: "Ayu Baru" } }));
-});
-
-describe("tampilan", () => {
-  it("menampilkan inisial bila belum ada foto", () => {
-    renderWithProviders(ProfilePage);
-    expect(screen.getByRole("heading", { name: "Ayu Lestari" })).toBeInTheDocument();
-    expect(screen.getByText("A")).toBeInTheDocument();
-    expect(screen.getByLabelText("Nama")).toHaveValue("Ayu Lestari");
-    expect(screen.getByLabelText("Email")).toHaveValue("ayu@example.com");
+describe("ProfilePage", () => {
+  it("menampilkan data profil pada formulir", () => {
+    renderWithProviders(ProfilePage, { profile });
+    expect(screen.getByRole("heading", { name: "Budi" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Nama")).toHaveValue("Budi");
+    expect(screen.getByLabelText("Email")).toHaveValue("budi@del.ac.id");
   });
 
-  it("menampilkan foto bila tersedia", () => {
-    renderWithProviders(ProfilePage, {}, { user: { ...testUser, photo: "https://img.test/a.png" } });
-    expect(screen.getByRole("img", { name: "Ayu Lestari" })).toHaveAttribute("src", "https://img.test/a.png");
-  });
-});
-
-describe("ubah data diri", () => {
-  it.each([
-    ["nama", "Nama"],
-    ["email", "Email"],
-  ])("memperingatkan bila %s kosong", async (_name, label) => {
-    renderWithProviders(ProfilePage);
-    await typeInto(label, "  ");
-    await submitForm("profile-form");
-    warned();
-    expect(putProfile).not.toHaveBeenCalled();
-  });
-
-  it("menyimpan data diri dan memuat ulang profil", async () => {
-    vi.mocked(putProfile).mockResolvedValue(ok(null, "Profil diperbarui"));
-    renderWithProviders(ProfilePage);
-    await typeInto("Nama", "Ayu Baru");
-    await submitForm("profile-form");
-
+  it("menyimpan data profil", async () => {
+    vi.mocked(putMe).mockResolvedValue(ok({ user: makeUser({ name: "Baru" }) }));
+    const { container } = renderWithProviders(ProfilePage, { profile });
+    await typeInto(screen.getByLabelText("Nama"), "Baru");
+    await submitForm(container, 0);
+    await waitFor(() => expect(putMe).toHaveBeenCalledWith("Baru", "budi@del.ac.id"));
     await waitFor(() =>
-      expect(screen.getByRole("heading", { name: "Ayu Baru" })).toBeInTheDocument()
+      expect(Swal.fire).toHaveBeenCalledWith(expect.objectContaining({ icon: "success" })),
     );
-    expect(putProfile).toHaveBeenCalledWith({ name: "Ayu Baru", email: "ayu@example.com" });
-    expect(fire).toHaveBeenCalledWith(expect.objectContaining({ icon: "success" }));
   });
-});
 
-describe("unggah foto", () => {
-  it("memperingatkan bila belum memilih foto", async () => {
-    renderWithProviders(ProfilePage);
-    await submitForm("photo-form");
-    warned();
+  it("memperingatkan bila foto belum dipilih", async () => {
+    const { container } = renderWithProviders(ProfilePage, { profile });
+    await submitForm(container, 1);
+    await waitFor(() =>
+      expect(Swal.fire).toHaveBeenCalledWith(expect.objectContaining({ icon: "warning" })),
+    );
     expect(postPhoto).not.toHaveBeenCalled();
   });
 
   it("mengunggah foto yang dipilih", async () => {
-    vi.mocked(postPhoto).mockResolvedValue(ok(null, "Foto diperbarui"));
-    renderWithProviders(ProfilePage);
-    const file = makeFile();
-    await fireEvent.change(screen.getByLabelText("Pilih foto"), { target: { files: [file] } });
-    await submitForm("photo-form");
-
+    vi.mocked(postPhoto).mockResolvedValue(ok());
+    vi.mocked(getMe).mockResolvedValue(ok({ user: profile }));
+    const { container } = renderWithProviders(ProfilePage, { profile });
+    const file = new File(["x"], "foto.png", { type: "image/png" });
+    await fireEvent.change(screen.getByLabelText("Berkas foto"), { target: { files: [file] } });
+    await submitForm(container, 1);
     await waitFor(() => expect(postPhoto).toHaveBeenCalledWith(file));
-  });
-});
-
-describe("ubah kata sandi", () => {
-  const fill = async (current: string, next: string, confirm: string) => {
-    await typeInto("Kata sandi lama", current);
-    await typeInto("Kata sandi baru", next);
-    await typeInto("Ulangi kata sandi baru", confirm);
-  };
-
-  it("memperingatkan bila kata sandi lama kosong", async () => {
-    renderWithProviders(ProfilePage);
-    await submitForm("password-form");
-    warned();
-    expect(putPassword).not.toHaveBeenCalled();
+    await waitFor(() => expect(getMe).toHaveBeenCalled());
   });
 
-  it("memperingatkan bila kata sandi baru kosong", async () => {
-    renderWithProviders(ProfilePage);
-    await typeInto("Kata sandi lama", "lama");
-    await submitForm("password-form");
-    warned();
-    expect(putPassword).not.toHaveBeenCalled();
+  it("mengubah kata sandi lalu mengosongkan kolom", async () => {
+    vi.mocked(putPassword).mockResolvedValue(ok());
+    const { container } = renderWithProviders(ProfilePage, { profile });
+    await typeInto(screen.getByLabelText("Kata Sandi Saat Ini"), "lama");
+    await typeInto(screen.getByLabelText("Kata Sandi Baru"), "baru123");
+    await typeInto(screen.getByLabelText("Konfirmasi Kata Sandi Baru"), "baru123");
+    await submitForm(container, 2);
+    await waitFor(() => expect(putPassword).toHaveBeenCalledWith("lama", "baru123", "baru123"));
+    await waitFor(() => expect(screen.getByLabelText("Kata Sandi Baru")).toHaveValue(""));
+    expect(screen.getByLabelText("Kata Sandi Saat Ini")).toHaveValue("");
+    expect(screen.getByLabelText("Konfirmasi Kata Sandi Baru")).toHaveValue("");
   });
 
-  it("memperingatkan bila konfirmasi berbeda", async () => {
-    renderWithProviders(ProfilePage);
-    await fill("lama", "baru", "beda");
-    await submitForm("password-form");
-    warned();
-    expect(putPassword).not.toHaveBeenCalled();
-  });
-
-  it("mengosongkan formulir setelah berhasil", async () => {
-    vi.mocked(putPassword).mockResolvedValue(ok(null, "Kata sandi diubah"));
-    renderWithProviders(ProfilePage);
-    await fill("lama", "baru", "baru");
-    await submitForm("password-form");
-
-    await waitFor(() => expect(screen.getByLabelText("Kata sandi lama")).toHaveValue(""));
-    expect(putPassword).toHaveBeenCalledWith({ password: "lama", new_password: "baru" });
-    expect(screen.getByLabelText("Kata sandi baru")).toHaveValue("");
-    expect(screen.getByLabelText("Ulangi kata sandi baru")).toHaveValue("");
-  });
-
-  it("mempertahankan isian bila gagal", async () => {
-    vi.mocked(putPassword).mockResolvedValue(fail("Kata sandi lama salah"));
-    renderWithProviders(ProfilePage);
-    await fill("lama", "baru", "baru");
-    await submitForm("password-form");
-
+  it("menampilkan dialog error saat perubahan gagal", async () => {
+    vi.mocked(putPassword).mockResolvedValue(fail("Kata sandi salah"));
+    const { container } = renderWithProviders(ProfilePage, { profile });
+    await submitForm(container, 2);
     await waitFor(() =>
-      expect(fire).toHaveBeenCalledWith(expect.objectContaining({ icon: "error" }))
+      expect(Swal.fire).toHaveBeenCalledWith(expect.objectContaining({ icon: "error", text: "Kata sandi salah" })),
     );
-    expect(screen.getByLabelText("Kata sandi lama")).toHaveValue("lama");
   });
 });

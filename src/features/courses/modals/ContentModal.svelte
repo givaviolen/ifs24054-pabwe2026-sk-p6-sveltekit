@@ -1,55 +1,76 @@
 <script lang="ts">
   import { useInput } from "../../../hooks/useInput";
-  import { getYoutubeEmbedUrl, notify, showWarningDialog } from "../../../helpers/toolsHelper";
-  import Modal from "../../common/components/Modal.svelte";
-  import type { CourseContent } from "../api/courseApi";
-  import { addContent, editContent, mutating } from "../states/coursesStore";
+  import { runWithFeedback } from "../../../helpers/toolsHelper";
+  import ModalShell from "../components/ModalShell.svelte";
+  import {
+    addContent,
+    changeContent,
+    isContentMutating,
+  } from "../states/coursesStore";
 
+  // `content` bernilai null saat menambah materi baru.
   let {
     courseId,
-    content = null,
-    onclose,
-  }: { courseId: string; content?: CourseContent | null; onclose: () => void } = $props();
+    content,
+    onClose,
+    onSaved,
+  }: {
+    courseId: number;
+    content: CourseContent | null;
+    onClose: () => void;
+    onSaved: () => unknown;
+  } = $props();
 
   const { value: title } = useInput(content ? content.title : "");
   const { value: youtube } = useInput(content ? content.youtube : "");
 
+  const save = () =>
+    content
+      ? changeContent(content.id, $title, $youtube)
+      : addContent(courseId, $title, $youtube);
+
   async function handleSubmit(event: SubmitEvent) {
     event.preventDefault();
-    if (!$title.trim()) {
-      await showWarningDialog("Judul materi wajib diisi.");
-      return;
-    }
-    if (!getYoutubeEmbedUrl($youtube)) {
-      await showWarningDialog("Masukkan tautan YouTube yang valid.");
-      return;
-    }
-
-    const input = { title: $title.trim(), youtube: $youtube.trim() };
-    const result = content
-      ? await editContent(courseId, content.id, input)
-      : await addContent(courseId, input);
-    if (await notify(result)) {
-      onclose();
-    }
+    await runWithFeedback(save, () => {
+      onSaved();
+      onClose();
+    });
   }
 </script>
 
-<Modal title={content ? "Ubah Materi" : "Tambah Materi"} {onclose}>
-  <form class="space-y-4" data-testid="content-form" onsubmit={handleSubmit}>
+<ModalShell title={content ? "Ubah Materi" : "Tambah Materi"} {onClose}>
+  <form class="space-y-4" onsubmit={handleSubmit} novalidate>
     <div>
-      <label for="content-title" class="mb-1 block text-sm font-medium">Judul materi</label>
-      <input id="content-title" type="text" bind:value={$title} class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200" />
+      <label for="content-title" class="mb-1 block text-sm font-medium">Judul</label>
+      <input name="title"
+        id="content-title"
+        type="text"
+        bind:value={$title}
+        class="w-full rounded-xl border border-slate-300 px-4 py-3"
+      />
     </div>
     <div>
-      <label for="content-youtube" class="mb-1 block text-sm font-medium">Tautan YouTube</label>
-      <input id="content-youtube" type="url" placeholder="https://www.youtube.com/watch?v=..." bind:value={$youtube} class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200" />
+      <label for="content-youtube" class="mb-1 block text-sm font-medium">
+        Tautan YouTube
+      </label>
+      <input name="youtube"
+        id="content-youtube"
+        type="url"
+        bind:value={$youtube}
+        class="w-full rounded-xl border border-slate-300 px-4 py-3"
+      />
     </div>
-    <div class="flex justify-end gap-2">
-      <button type="button" class="rounded-lg px-4 py-2 text-sm font-medium hover:bg-slate-100" onclick={onclose}>Batal</button>
-      <button type="submit" disabled={$mutating.content} class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60">
-        {$mutating.content ? "Menyimpan..." : "Simpan materi"}
+    <div class="flex justify-end gap-3">
+      <button type="button" onclick={onClose} class="rounded-xl px-4 py-2">
+        Batal
+      </button>
+      <button
+        type="submit"
+        disabled={$isContentMutating}
+        class="rounded-xl bg-indigo-600 px-5 py-2 font-semibold text-white disabled:opacity-60"
+      >
+        Simpan
       </button>
     </div>
   </form>
-</Modal>
+</ModalShell>

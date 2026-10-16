@@ -1,26 +1,38 @@
-# ifs24054-pabwe2026-sk-p6-sveltekit
+# ifs24025-pabwe2026-sk-p6-sveltekit
 
-Delcom Courses — Studi Kasus 2 PABWE 2026 P6 (SvelteKit 3 + TypeScript + Svelte 5, adapter-bun, Tailwind CSS v4).
+Studi Kasus 2 (Praktikum 6): **Delcom Courses** — SvelteKit 3, TypeScript, Svelte 5,
+Tailwind CSS v4, `lucide-svelte`, SweetAlert2, system fonts, Delcom Open API
+(`https://open-api.delcom.org/api/v1`). Local builds use `adapter-bun`; Vercel builds
+automatically use `adapter-vercel`.
 
 ## Menjalankan
 
 ```bash
 bun install
-bun run dev            # http://localhost:3005
-bun run test:coverage  # threshold 100%
+bun run test:coverage   # line & function 100%; statement >= 99%, branch >= 85% (lihat vite.config.ts)
+bun run dev             # http://localhost:3005
 bun run build && bun start
 ```
 
-`.env` memuat `VITE_DELCOM_BASEURL` dan `APP_PORT=3005`.
+Deploy to Vercel with the default SvelteKit build command (`bun run build`). Vercel
+sets `VERCEL` during the build, which selects the Vercel adapter instead of producing
+a Bun server build. The project pins Vercel's build and function runtime to Node 24.
 
-## Titik yang perlu dicocokkan dengan dokumentasi API
+`.env` (sudah disertakan) berisi `VITE_DELCOM_BASEURL` dan `APP_PORT=3005`.
+For Vercel, set `VITE_DELCOM_BASEURL=https://open-api.delcom.org/api/v1` in the
+project's environment variables; if it is unset, production builds use that URL by
+default. The local `.env` can continue pointing to `http://localhost:8000/api/v1`.
+Jangan memakai `bun test`; gunakan `bun run test` atau `bun x vitest run`.
 
-Semua jalur endpoint ada di `src/features/courses/api/courseApi.ts` dan
-`src/features/users/api/userApi.ts`. Bila dokumentasi
-https://open-api.delcom.org/docs/1.0/api-courses berbeda, ubah di dua berkas itu saja:
+## Proxy API
 
-- peserta: `POST/DELETE /courses/:id/students`
-- rating: `POST /courses/:id/ratings` dengan body `{ rating }`
-- status belajar: `PUT /courses/-/contents/:id/learns` dengan body `{ status: 0|1 }`
-- body konten: `{ title, youtube }`
-- ubah kata sandi: `PUT /users/password` dengan `{ password, new_password }`; foto: `POST /users/photo`
+Browser memanggil `/api/*` di origin aplikasi sendiri; `src/routes/api/[...path]/+server.ts`
+meneruskannya ke `VITE_DELCOM_BASEURL` dari sisi server. Dengan begitu tidak ada permintaan
+lintas-origin (CORS) dari browser ke Delcom Open API. Gambar sampul/foto tetap dimuat
+langsung dari server Delcom lewat `getAssetUrl`.
+
+## Struktur
+
+- `src/routes` — halaman SvelteKit (`/`, `/courses/[courseId]`, `/courses/[courseId]/contents/[contentId]`, `/auth/*`, `/users`, `/profile`, `+error.svelte`)
+- `src/features/{auth,users,courses,common}` — api, states (Svelte store), layouts, pages, modals, components
+- `src/helpers`, `src/hooks` — `apiHelper`, `toolsHelper`, `storeHelper`, `useInput`

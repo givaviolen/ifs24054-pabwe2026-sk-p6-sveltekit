@@ -1,3 +1,2 @@
-// Aplikasi berjalan sebagai SPA: token disimpan di localStorage sehingga
-// render di server dimatikan.
+// Sesi disimpan di localStorage, jadi aplikasi dirender di sisi klien.
 export const ssr = false;

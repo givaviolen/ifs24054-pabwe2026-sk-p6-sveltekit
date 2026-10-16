@@ -1,138 +1,114 @@
 import { writable } from "svelte/store";
+import { isSuccess } from "../../../helpers/apiHelper";
+import { withFlag } from "../../../helpers/storeHelper";
 import {
-  isSuccess,
-  toResult,
-  type ActionResult,
-  type ApiResponse,
-} from "../../../helpers/apiHelper";
-import * as api from "../api/courseApi";
-import type {
-  ContentInput,
-  Course,
-  CourseContent,
-  CourseInput,
+  deleteAllCourses,
+  deleteContent,
+  deleteCourse,
+  deleteStudent,
+  getContent,
+  getCourse,
+  getCourses,
+  postContent,
+  postCourse,
+  postCover,
+  postLearn,
+  postStudent,
+  putContent,
+  putCourse,
+  putRating,
 } from "../api/courseApi";
 
-export type MutationKey =
-  | "add"
-  | "change"
-  | "cover"
-  | "remove"
-  | "removeAll"
-  | "join"
-  | "leave"
-  | "rate"
-  | "content"
-  | "learn";
+type Id = number | string;
 
-const idle: Record<MutationKey, boolean> = {
-  add: false,
-  change: false,
-  cover: false,
-  remove: false,
-  removeAll: false,
-  join: false,
-  leave: false,
-  rate: false,
-  content: false,
-  learn: false,
-};
-
+// koleksi, detail, dan konten
 export const courses = writable<Course[]>([]);
-export const course = writable<Course | null>(null);
+export const course = writable<CourseDetail | null>(null);
 export const content = writable<CourseContent | null>(null);
-export const coursesLoading = writable(false);
-export const courseLoading = writable(false);
-export const contentLoading = writable(false);
-export const mutating = writable<Record<MutationKey, boolean>>({ ...idle });
 
-const normalize = (item: Course): Course => ({
-  ...item,
-  students: item.students ?? [],
-  contents: item.contents ?? [],
-  ratings: item.ratings ?? [],
-});
+// bendera pemuatan
+export const isCoursesLoading = writable(false);
+export const isCourseLoading = writable(false);
+export const isContentLoading = writable(false);
 
-// ---- Pemuatan data ----
-export async function loadCourses(): Promise<ActionResult> {
-  coursesLoading.set(true);
-  const response = await api.getCourses();
-  if (isSuccess(response)) {
-    courses.set(response.data.courses.map(normalize));
-  }
-  coursesLoading.set(false);
-  return toResult(response);
-}
+// bendera mutasi
+export const isAdding = writable(false);
+export const isChanging = writable(false);
+export const isChangingCover = writable(false);
+export const isDeleting = writable(false);
+export const isDeletingAll = writable(false);
+export const isStudentMutating = writable(false);
+export const isRating = writable(false);
+export const isContentMutating = writable(false);
 
-export async function loadCourse(id: string): Promise<ActionResult> {
-  courseLoading.set(true);
-  const response = await api.getCourse(id);
-  course.set(isSuccess(response) ? normalize(response.data.course) : null);
-  courseLoading.set(false);
-  return toResult(response);
-}
-
-export async function loadContent(contentId: string): Promise<ActionResult> {
-  contentLoading.set(true);
-  const response = await api.getContent(contentId);
-  content.set(isSuccess(response) ? response.data.course_content : null);
-  contentLoading.set(false);
-  return toResult(response);
-}
-
-// ---- Mutasi ----
-async function mutate(
-  key: MutationKey,
-  request: () => Promise<ApiResponse>,
-  after: () => Promise<unknown>
-): Promise<ActionResult> {
-  mutating.update((state) => ({ ...state, [key]: true }));
-  const response = await request();
-  if (isSuccess(response)) {
-    await after();
-  }
-  mutating.update((state) => ({ ...state, [key]: false }));
-  return toResult(response);
-}
-
-export const createCourse = (input: CourseInput) =>
-  mutate("add", () => api.postCourse(input), () => loadCourses());
-
-export const editCourse = (id: string, input: CourseInput) =>
-  mutate("change", () => api.putCourse(id, input), () => loadCourse(id));
-
-export const editCover = (id: string, file: File) =>
-  mutate("cover", () => api.postCourseCover(id, file), () => loadCourse(id));
-
-export const removeCourse = (id: string) =>
-  mutate("remove", () => api.deleteCourse(id), async () => {
-    courses.update((list) => list.filter((item) => item.id !== id));
+export function loadCourses(onlyMine: boolean) {
+  return withFlag(isCoursesLoading, async () => {
+    const response = await getCourses(onlyMine);
+    courses.set(isSuccess(response) ? response.data.courses : []);
+    return response;
   });
+}
 
-export const removeAllCourses = () =>
-  mutate("removeAll", () => api.deleteAllCourses(), async () => {
-    courses.set([]);
+export function loadCourse(id: Id) {
+  return withFlag(isCourseLoading, async () => {
+    const response = await getCourse(id);
+    course.set(isSuccess(response) ? response.data.course : null);
+    return response;
   });
+}
 
-export const joinCourse = (id: string) =>
-  mutate("join", () => api.joinCourseRequest(id), () => loadCourse(id));
-
-export const leaveCourse = (id: string) =>
-  mutate("leave", () => api.leaveCourseRequest(id), () => loadCourse(id));
-
-export const rateCourse = (id: string, rating: number) =>
-  mutate("rate", () => api.postRating(id, rating), () => loadCourse(id));
-
-export const addContent = (courseId: string, input: ContentInput) =>
-  mutate("content", () => api.postContent(courseId, input), () => loadCourse(courseId));
-
-export const editContent = (courseId: string, contentId: string, input: ContentInput) =>
-  mutate("content", () => api.putContent(contentId, input), () => loadCourse(courseId));
-
-export const removeContent = (courseId: string, contentId: string) =>
-  mutate("content", () => api.deleteContent(contentId), () => loadCourse(courseId));
-
-export const setLearned = (contentId: string, learned: boolean) =>
-  mutate("learn", () => api.putLearned(contentId, learned ? 1 : 0), async () => {
-    content.update((item) => ({ ...item, learned }) as CourseContent);
+export function loadContent(id: Id) {
+  return withFlag(isContentLoading, async () => {
+    const response = await getContent(id);
+    content.set(isSuccess(response) ? response.data.course_content : null);
+    return response;
   });
+}
+
+export function addCourse(title: string, description: string) {
+  return withFlag(isAdding, () => postCourse(title, description));
+}
+
+export function changeCourse(id: Id, title: string, description: string) {
+  return withFlag(isChanging, () => putCourse(id, title, description));
+}
+
+export function changeCover(id: Id, file: File) {
+  return withFlag(isChangingCover, () => postCover(id, file));
+}
+
+export function removeCourse(id: Id) {
+  return withFlag(isDeleting, () => deleteCourse(id));
+}
+
+export function removeAllCourses() {
+  return withFlag(isDeletingAll, () => deleteAllCourses());
+}
+
+export function joinCourse(id: Id) {
+  return withFlag(isStudentMutating, () => postStudent(id));
+}
+
+export function leaveCourse(id: Id) {
+  return withFlag(isStudentMutating, () => deleteStudent(id));
+}
+
+export function rateCourse(id: Id, ratings: number, comment: string) {
+  return withFlag(isRating, () => putRating(id, ratings, comment));
+}
+
+export function addContent(courseId: Id, title: string, youtube: string) {
+  return withFlag(isContentMutating, () => postContent(courseId, title, youtube));
+}
+
+export function changeContent(id: Id, title: string, youtube: string) {
+  return withFlag(isContentMutating, () => putContent(id, title, youtube));
+}
+
+export function removeContent(id: Id) {
+  return withFlag(isContentMutating, () => deleteContent(id));
+}
+
+export function setLearnStatus(id: Id, status: 0 | 1) {
+  return withFlag(isContentMutating, () => postLearn(id, status));
+}

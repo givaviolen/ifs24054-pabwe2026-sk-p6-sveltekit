@@ -1,33 +1,54 @@
 <script lang="ts">
-  import { onMount } from "svelte";
-  import { ArrowLeft, Check } from "lucide-svelte";
-  import { getYoutubeEmbedUrl, notify } from "../../../helpers/toolsHelper";
-  import { content, contentLoading, loadContent, mutating, setLearned } from "../states/coursesStore";
+  import { ArrowLeft, Video } from "lucide-svelte";
+  import {
+    getYoutubeEmbedUrl,
+    runWithFeedback,
+  } from "../../../helpers/toolsHelper";
+  import {
+    content,
+    isContentLoading,
+    isContentMutating,
+    loadContent,
+    setLearnStatus,
+  } from "../states/coursesStore";
 
-  let { courseId, contentId }: { courseId: string; contentId: string } = $props();
+  let { courseId, contentId }: { courseId: string; contentId: string } =
+    $props();
 
-  const embedUrl = $derived($content ? getYoutubeEmbedUrl($content.youtube) : "");
+  const embedUrl = $derived(getYoutubeEmbedUrl($content.youtube));
 
-  onMount(() => {
-    content.set(null);
+  $effect(() => {
     loadContent(contentId);
   });
+
+  const reload = () => loadContent(contentId);
+  const toggleFinished = () =>
+    runWithFeedback(
+      () => setLearnStatus(contentId, $content.my_status_finished ? 0 : 1),
+      reload,
+    );
 </script>
 
-<a href={`/courses/${courseId}`} class="mb-4 inline-flex items-center gap-2 text-sm font-medium text-indigo-600 hover:underline">
-  <ArrowLeft class="h-4 w-4" /> Kembali ke kursus
-</a>
-
-{#if $contentLoading && !$content}
-  <h1 class="py-16 text-center text-base font-normal text-slate-500">Memuat materi...</h1>
+{#if $isContentLoading}
+  <h1 class="sr-only">Materi Kursus</h1>
+  <p class="text-slate-600">Memuat materi...</p>
 {:else if !$content}
-  <h1 class="py-16 text-center text-base font-semibold">Materi tidak ditemukan</h1>
+  <div class="space-y-4">
+    <h1 class="text-2xl font-extrabold">Materi tidak ditemukan.</h1>
+    <a href={`/courses/${courseId}`} class="font-semibold text-indigo-600">Kembali ke kursus</a>
+  </div>
 {:else}
-  <article class="space-y-4">
-    <h1 class="text-2xl font-bold">{$content.title}</h1>
+  <div class="max-w-4xl space-y-6">
+    <a href={`/courses/${courseId}`} class="inline-flex items-center gap-2 text-sm font-medium text-slate-600">
+      <ArrowLeft class="h-4 w-4" /> <span>Kembali ke kursus</span>
+    </a>
+    <h1 class="flex items-center gap-3 text-2xl font-extrabold">
+      <Video class="h-6 w-6 text-indigo-600" />
+      <span>{$content.title}</span>
+    </h1>
 
     {#if embedUrl}
-      <div class="aspect-video overflow-hidden rounded-xl bg-black">
+      <div class="aspect-video overflow-hidden rounded-2xl bg-black">
         <iframe
           src={embedUrl}
           title={$content.title}
@@ -37,19 +58,22 @@
         ></iframe>
       </div>
     {:else}
-      <p class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-        Tautan video tidak valid, sehingga pemutar tidak dapat ditampilkan.
+      <p class="rounded-xl bg-amber-50 p-4 text-amber-700">
+        Tautan YouTube tidak valid.
       </p>
     {/if}
 
     <button
       type="button"
-      disabled={$mutating.learn}
-      onclick={async () => notify(await setLearned(contentId, !$content.learned))}
-      class="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
+      onclick={toggleFinished}
+      disabled={$isContentMutating}
+      class="rounded-xl bg-indigo-600 px-5 py-3 font-semibold text-white disabled:opacity-60"
     >
-      <Check class="h-4 w-4" />
-      {$content.learned ? "Tandai belum selesai" : "Tandai selesai"}
+      {#if $content.my_status_finished}
+        Tandai Belum Selesai
+      {:else}
+        Tandai Selesai
+      {/if}
     </button>
-  </article>
+  </div>
 {/if}

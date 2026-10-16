@@ -1,146 +1,106 @@
 import { get } from "svelte/store";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getAccessToken, putAccessToken } from "../../../helpers/apiHelper";
-import { fail, ok, resetStores, testUser } from "../../../test-utils";
-import { fetchMe, loginRequest, registerRequest } from "../api/authApi";
+import { fail, makeUser, ok } from "../../../test-utils";
+import { getMe } from "../../users/api/userApi";
+import { postLogin, postRegister } from "../api/authApi";
 import {
-  authLoading,
-  isLoggedIn,
+  authProfile,
+  authToken,
+  isAuthLoading,
+  isLogin,
+  isSessionReady,
+  loadProfile,
   login,
   logout,
-  profile,
-  refreshProfile,
   register,
-  restoreSession,
-  sessionReady,
-  token,
 } from "./authStore";
 
-vi.mock("../api/authApi", () => ({
-  fetchMe: vi.fn(),
-  loginRequest: vi.fn(),
-  registerRequest: vi.fn(),
-}));
+vi.mock("../api/authApi");
+vi.mock("../../users/api/userApi");
 
 beforeEach(() => {
-  resetStores();
+  authToken.set(null);
+  authProfile.set(null);
 });
 
-describe("restoreSession", () => {
-  it("menandai sesi siap tanpa memanggil API bila tidak ada token", async () => {
-    await restoreSession();
-    expect(fetchMe).not.toHaveBeenCalled();
-    expect(get(sessionReady)).toBe(true);
-    expect(get(isLoggedIn)).toBe(false);
+describe("status sesi", () => {
+  it("isLogin mengikuti token", () => {
+    expect(get(isLogin)).toBe(false);
+    authToken.set("t");
+    expect(get(isLogin)).toBe(true);
   });
 
-  it("memulihkan sesi bila token valid", async () => {
-    putAccessToken("tok");
-    vi.mocked(fetchMe).mockResolvedValue(ok({ user: testUser }));
-
-    await restoreSession();
-
-    expect(get(token)).toBe("tok");
-    expect(get(profile)).toEqual(testUser);
-    expect(get(isLoggedIn)).toBe(true);
-    expect(get(sessionReady)).toBe(true);
-  });
-
-  it("menghapus token bila profil gagal dimuat", async () => {
-    putAccessToken("tok");
-    vi.mocked(fetchMe).mockResolvedValue(fail());
-
-    await restoreSession();
-
-    expect(getAccessToken()).toBeNull();
-    expect(get(isLoggedIn)).toBe(false);
-    expect(get(sessionReady)).toBe(true);
-  });
-});
-
-describe("login", () => {
-  it("gagal bila kredensial salah", async () => {
-    vi.mocked(loginRequest).mockResolvedValue(fail("Kredensial salah"));
-
-    const result = await login({ email: "a@b.c", password: "x" });
-
-    expect(result).toEqual({ ok: false, message: "Kredensial salah" });
-    expect(get(authLoading)).toBe(false);
-    expect(fetchMe).not.toHaveBeenCalled();
-  });
-
-  it("gagal dan menghapus token bila profil tidak bisa dimuat", async () => {
-    vi.mocked(loginRequest).mockResolvedValue(ok({ token: "tok" }));
-    vi.mocked(fetchMe).mockResolvedValue(fail("Profil gagal"));
-
-    const result = await login({ email: "a@b.c", password: "x" });
-
-    expect(result).toEqual({ ok: false, message: "Profil gagal" });
-    expect(getAccessToken()).toBeNull();
-    expect(get(isLoggedIn)).toBe(false);
-  });
-
-  it("berhasil menyimpan token, profil, dan status login", async () => {
-    vi.mocked(loginRequest).mockResolvedValue(ok({ token: "tok" }, "Login berhasil"));
-    vi.mocked(fetchMe).mockResolvedValue(ok({ user: testUser }));
-
-    const result = await login({ email: "a@b.c", password: "x" });
-
-    expect(result).toEqual({ ok: true, message: "Login berhasil" });
-    expect(getAccessToken()).toBe("tok");
-    expect(get(token)).toBe("tok");
-    expect(get(profile)).toEqual(testUser);
-    expect(get(isLoggedIn)).toBe(true);
-    expect(get(authLoading)).toBe(false);
-  });
-});
-
-describe("register", () => {
-  it("mengembalikan hasil sukses", async () => {
-    vi.mocked(registerRequest).mockResolvedValue(ok(null, "Terdaftar"));
-    expect(await register({ name: "A", email: "a@b.c", password: "1" })).toEqual({
-      ok: true,
-      message: "Terdaftar",
-    });
-    expect(get(authLoading)).toBe(false);
-  });
-
-  it("mengembalikan hasil gagal", async () => {
-    vi.mocked(registerRequest).mockResolvedValue(fail("Email dipakai"));
-    expect(await register({ name: "A", email: "a@b.c", password: "1" })).toEqual({
-      ok: false,
-      message: "Email dipakai",
-    });
-  });
-});
-
-describe("refreshProfile", () => {
-  it("memperbarui profil bila berhasil", async () => {
-    vi.mocked(fetchMe).mockResolvedValue(ok({ user: { ...testUser, name: "Baru" } }));
-    await refreshProfile();
-    expect(get(profile)?.name).toBe("Baru");
-  });
-
-  it("membiarkan profil bila gagal", async () => {
-    profile.set(testUser);
-    vi.mocked(fetchMe).mockResolvedValue(fail());
-    await refreshProfile();
-    expect(get(profile)).toEqual(testUser);
+  it("isSessionReady butuh token dan profil", () => {
+    expect(get(isSessionReady)).toBe(false);
+    authToken.set("t");
+    expect(get(isSessionReady)).toBe(false);
+    authProfile.set(makeUser());
+    expect(get(isSessionReady)).toBe(true);
   });
 });
 
 describe("logout", () => {
-  it("membersihkan token dan sesi", () => {
-    putAccessToken("tok");
-    token.set("tok");
-    profile.set(testUser);
-    isLoggedIn.set(true);
-
+  it("menghapus token dan profil", () => {
+    putAccessToken("t");
+    authToken.set("t");
+    authProfile.set(makeUser());
     logout();
-
     expect(getAccessToken()).toBeNull();
-    expect(get(token)).toBeNull();
-    expect(get(profile)).toBeNull();
-    expect(get(isLoggedIn)).toBe(false);
+    expect(get(authToken)).toBeNull();
+    expect(get(authProfile)).toBeNull();
+  });
+});
+
+describe("loadProfile", () => {
+  it("mengisi profil bila berhasil", async () => {
+    vi.mocked(getMe).mockResolvedValue(ok({ user: makeUser() }));
+    expect(await loadProfile()).toBe(true);
+    expect(get(authProfile)).toEqual(makeUser());
+  });
+
+  it("logout bila token ditolak", async () => {
+    authToken.set("basi");
+    vi.mocked(getMe).mockResolvedValue(fail("Unauthenticated."));
+    expect(await loadProfile()).toBe(false);
+    expect(get(authToken)).toBeNull();
+  });
+});
+
+describe("login", () => {
+  it("menyimpan token lalu memuat profil", async () => {
+    let loadingDuringRequest = false;
+    vi.mocked(postLogin).mockImplementation(async () => {
+      loadingDuringRequest = get(isAuthLoading);
+      return ok({ token: "tok-1", user: makeUser() });
+    });
+    vi.mocked(getMe).mockResolvedValue(ok({ user: makeUser() }));
+
+    const response = await login("budi@del.ac.id", "rahasia");
+
+    expect(response.status).toBe("success");
+    expect(loadingDuringRequest).toBe(true);
+    expect(get(isAuthLoading)).toBe(false);
+    expect(getAccessToken()).toBe("tok-1");
+    expect(get(authToken)).toBe("tok-1");
+    expect(get(authProfile)).toEqual(makeUser());
+  });
+
+  it("tidak menyimpan token saat gagal", async () => {
+    vi.mocked(postLogin).mockResolvedValue(fail("Email atau kata sandi salah"));
+    const response = await login("a", "b");
+    expect(response.status).toBe("fail");
+    expect(get(authToken)).toBeNull();
+    expect(getMe).not.toHaveBeenCalled();
+  });
+});
+
+describe("register", () => {
+  it("meneruskan respons API dan menurunkan bendera", async () => {
+    vi.mocked(postRegister).mockResolvedValue(ok(undefined, "Terdaftar"));
+    const response = await register("Budi", "b@d.id", "rahasia");
+    expect(response.message).toBe("Terdaftar");
+    expect(postRegister).toHaveBeenCalledWith("Budi", "b@d.id", "rahasia");
+    expect(get(isAuthLoading)).toBe(false);
   });
 });

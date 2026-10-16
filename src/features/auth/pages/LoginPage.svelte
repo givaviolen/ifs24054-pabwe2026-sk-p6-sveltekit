@@ -1,65 +1,56 @@
 <script lang="ts">
-  import { goto } from "$app/navigation";
-  import { LogIn } from "lucide-svelte";
   import { useInput } from "../../../hooks/useInput";
-  import { showErrorDialog, showWarningDialog } from "../../../helpers/toolsHelper";
-  import { authLoading, login } from "../states/authStore";
+  import { isSuccess } from "../../../helpers/apiHelper";
+  import { getErrorMessage, showErrorDialog } from "../../../helpers/toolsHelper";
+  import { isAuthLoading, login } from "../states/authStore";
 
   const { value: email } = useInput("");
   const { value: password } = useInput("");
 
   async function handleSubmit(event: SubmitEvent) {
     event.preventDefault();
-    if (!$email.trim() || !$password) {
-      await showWarningDialog("Email dan kata sandi wajib diisi.");
-      return;
-    }
-
-    const result = await login({ email: $email.trim(), password: $password });
-    if (result.ok) {
-      await goto("/");
-    } else {
-      await showErrorDialog(result.message);
+    const response = await login($email, $password);
+    if (!isSuccess(response)) {
+      await showErrorDialog(getErrorMessage(response));
     }
   }
 </script>
 
-<h1 class="text-2xl font-bold">Masuk ke akunmu</h1>
-<p class="mt-1 text-sm text-slate-500">Lanjutkan belajar dari kursus terakhirmu.</p>
+<h1 class="text-3xl font-extrabold text-slate-900">Masuk</h1>
+<p class="mt-2 mb-8 text-slate-600">Masuk untuk mulai belajar.</p>
 
-<form class="mt-8 space-y-4" data-testid="login-form" onsubmit={handleSubmit}>
+<form class="space-y-5" onsubmit={handleSubmit} novalidate>
   <div>
     <label for="login-email-input" class="mb-1 block text-sm font-medium">Email</label>
-    <input
+    <input name="email"
       id="login-email-input"
       type="email"
       bind:value={$email}
-      autocomplete="email"
-      class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+      class="w-full rounded-xl border border-slate-300 px-4 py-3 focus:border-indigo-500 focus:outline-none"
     />
   </div>
   <div>
-    <label for="login-password-input" class="mb-1 block text-sm font-medium">Kata sandi</label>
-    <input
+    <label for="login-password-input" class="mb-1 block text-sm font-medium">
+      Kata Sandi
+    </label>
+    <input name="password"
       id="login-password-input"
       type="password"
       bind:value={$password}
-      autocomplete="current-password"
-      class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+      class="w-full rounded-xl border border-slate-300 px-4 py-3 focus:border-indigo-500 focus:outline-none"
     />
   </div>
   <button
     id="login-submit-button"
     type="submit"
-    disabled={$authLoading}
-    class="flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
+    disabled={$isAuthLoading}
+    class="w-full rounded-xl bg-indigo-600 py-3 font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
   >
-    <LogIn class="h-4 w-4" />
-    {$authLoading ? "Memproses..." : "Masuk"}
+    Masuk
   </button>
 </form>
 
-<p class="mt-6 text-center text-sm text-slate-500">
+<p class="mt-6 text-center text-sm text-slate-600">
   Belum punya akun?
-  <a href="/auth/register" class="font-semibold text-indigo-600 hover:underline">Daftar</a>
+  <a href="/auth/register" class="font-semibold text-indigo-600">Daftar</a>
 </p>

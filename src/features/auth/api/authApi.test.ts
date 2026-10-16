@@ -1,32 +1,24 @@
 import { describe, expect, it, vi } from "vitest";
-import { apiFetch } from "../../../helpers/apiHelper";
-import { fetchMe, loginRequest, registerRequest } from "./authApi";
+import { apiRequest } from "../../../helpers/apiHelper";
+import { postLogin, postRegister } from "./authApi";
 
-vi.mock("../../../helpers/apiHelper", () => ({ apiFetch: vi.fn() }));
+vi.mock("../../../helpers/apiHelper");
 
 describe("authApi", () => {
-  it("registerRequest memanggil POST /auth/register tanpa token", () => {
-    const input = { name: "A", email: "a@b.c", password: "123456" };
-    registerRequest(input);
-    expect(apiFetch).toHaveBeenCalledWith("/auth/register", {
-      method: "POST",
-      body: input,
-      auth: false,
-    });
+  it("postLogin mengirim email dan password", async () => {
+    vi.mocked(apiRequest).mockResolvedValue({ status: "success", message: "ok" });
+    const result = await postLogin("a@b.c", "rahasia");
+    expect(result.status).toBe("success");
+    expect(apiRequest).toHaveBeenCalledWith("POST", "/auth/login", { email: "a@b.c", password: "rahasia" });
   });
 
-  it("loginRequest memanggil POST /auth/login tanpa token", () => {
-    const input = { email: "a@b.c", password: "123456" };
-    loginRequest(input);
-    expect(apiFetch).toHaveBeenCalledWith("/auth/login", {
-      method: "POST",
-      body: input,
-      auth: false,
+  it("postRegister mengirim nama, email, dan password", async () => {
+    vi.mocked(apiRequest).mockResolvedValue({ status: "success", message: "ok" });
+    await postRegister("Budi", "a@b.c", "rahasia");
+    expect(apiRequest).toHaveBeenCalledWith("POST", "/auth/register", {
+      name: "Budi",
+      email: "a@b.c",
+      password: "rahasia",
     });
-  });
-
-  it("fetchMe memanggil GET /users/me", () => {
-    fetchMe();
-    expect(apiFetch).toHaveBeenCalledWith("/users/me");
   });
 });

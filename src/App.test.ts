@@ -1,59 +1,36 @@
-import { goto } from "$app/navigation";
-import { page } from "$app/state";
-import { render, screen, waitFor } from "@testing-library/svelte";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fetchMe } from "./features/auth/api/authApi";
-import { putAccessToken } from "./helpers/apiHelper";
-import RootLayout from "./routes/+layout.svelte";
-import { fail, ok, resetStores, snippetOf, testUser } from "./test-utils";
+import { get } from "svelte/store";
+import { describe, expect, it, vi } from "vitest";
+import { authProfile, authToken, login, logout } from "./features/auth/states/authStore";
+import { loadCourses, courses } from "./features/courses/states/coursesStore";
+import { makeCourse, makeUser, resetStores } from "./test-utils";
 
-vi.mock("./features/auth/api/authApi", () => ({
-  fetchMe: vi.fn(),
-  loginRequest: vi.fn(),
-  registerRequest: vi.fn(),
-}));
+/** Alur lengkap melalui fetch palsu: login -> token -> profil -> daftar kursus. */
+describe("alur aplikasi (API dengan fetch palsu)", () => {
+  it("login menyimpan token, memuat profil, lalu permintaan berikutnya memakai Bearer token", async () => {
+    resetStores();
+    const fetchMock = vi.fn(async (url: string) => {
+      const json = (body: unknown) => ({ json: async () => body });
+      if (url.endsWith("/auth/login")) {
+        return json({ status: "success", message: "ok", data: { token: "tok-9", user: makeUser() } });
+      }
+      if (url.endsWith("/users/me")) {
+        return json({ status: "success", message: "ok", data: { user: makeUser() } });
+      }
+      return json({ status: "success", message: "ok", data: { courses: [makeCourse()] } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
 
-const setPath = (path: string) => {
-  (page as any).url = new URL(`http://localhost${path}`);
-};
+    await login("budi@del.ac.id", "rahasia");
+    expect(get(authToken)).toBe("tok-9");
+    expect(get(authProfile)?.name).toBe("Budi");
 
-const renderRoot = () =>
-  render(RootLayout, { props: { children: snippetOf("<p>Isi rute</p>") } });
+    await loadCourses(true);
+    expect(get(courses)).toHaveLength(1);
+    const [url, init] = fetchMock.mock.calls.at(-1) as unknown as [string, RequestInit];
+    expect(url).toBe("/api/courses?is_me=1");
+    expect((init.headers as Record<string, string>).Authorization).toBe("Bearer tok-9");
 
-beforeEach(() => {
-  resetStores();
-});
-
-describe("layout root", () => {
-  it("merender rute /auth langsung tanpa layout kursus", () => {
-    setPath("/auth/login");
-    renderRoot();
-    expect(screen.getByText("Isi rute")).toBeInTheDocument();
-    expect(screen.queryByRole("navigation", { name: "Menu utama" })).not.toBeInTheDocument();
-  });
-
-  it("memulihkan sesi lalu membungkus rute lain dengan CourseLayout", async () => {
-    setPath("/");
-    putAccessToken("tok");
-    vi.mocked(fetchMe).mockResolvedValue(ok({ user: testUser }));
-    renderRoot();
-
-    expect(await screen.findByText("Isi rute")).toBeInTheDocument();
-    expect(screen.getByRole("navigation", { name: "Menu utama" })).toBeInTheDocument();
-  });
-
-  it("mengarahkan ke login bila tidak ada sesi", async () => {
-    setPath("/users");
-    renderRoot();
-    await waitFor(() => expect(goto).toHaveBeenCalledWith("/auth/login"));
-    expect(screen.queryByText("Isi rute")).not.toBeInTheDocument();
-  });
-
-  it("mengarahkan ke login bila token tidak valid lagi", async () => {
-    setPath("/");
-    putAccessToken("kedaluwarsa");
-    vi.mocked(fetchMe).mockResolvedValue(fail("Token tidak valid"));
-    renderRoot();
-    await waitFor(() => expect(goto).toHaveBeenCalledWith("/auth/login"));
+    logout();
+    expect(get(authToken)).toBeNull();
   });
 });

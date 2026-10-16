@@ -4,14 +4,27 @@
     <meta charset="utf-8" />
     <link rel="icon" type="image/svg+xml" href="/logo.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Delcom Courses</title>
     <meta
       name="description"
-      content="Delcom Courses: platform kursus video. Ikuti kursus, tonton materi YouTube, dan tandai materi yang sudah selesai."
+      content="Ikuti kursus daring Delcom, pelajari materi video, pantau progres, dan bagikan kursusmu."
     />
+    <title>Delcom Courses</title>
+    <style>
+      /* Cangkang statis: landmark <main> dan <h1> untuk dokumen awal sebelum JS
+         merender aplikasi (ssr = false). Disembunyikan begitu aplikasi terpasang. */
+      .app-shell-text {
+        padding: 1.5rem;
+      }
+      .app-root:has(> :not(script)) ~ .app-shell {
+        display: none;
+      }
+    </style>
     %sveltekit.head%
   </head>
   <body class="bg-slate-50 text-slate-900 font-sans antialiased min-h-screen">
-    <div style="display: contents">%sveltekit.body%</div>
+    <div class="app-root" style="display: contents">%sveltekit.body%</div>
+    <main class="app-shell">
+      <h1 class="app-shell-text">Delcom Courses</h1>
+    </main>
   </body>
 </html>

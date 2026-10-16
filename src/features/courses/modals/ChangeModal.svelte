@@ -1,43 +1,67 @@
 <script lang="ts">
   import { useInput } from "../../../hooks/useInput";
-  import { notify, showWarningDialog } from "../../../helpers/toolsHelper";
-  import MarkdownEditor from "../../common/components/MarkdownEditor.svelte";
-  import Modal from "../../common/components/Modal.svelte";
-  import type { Course } from "../api/courseApi";
-  import { editCourse, mutating } from "../states/coursesStore";
+  import { runWithFeedback } from "../../../helpers/toolsHelper";
+  import ModalShell from "../components/ModalShell.svelte";
+  import { changeCourse, isChanging } from "../states/coursesStore";
 
-  let { course, onclose }: { course: Course; onclose: () => void } = $props();
+  let {
+    course,
+    onClose,
+    onSaved,
+  }: {
+    course: Course;
+    onClose: () => void;
+    onSaved: () => unknown;
+  } = $props();
 
   const { value: title } = useInput(course.title);
-  let description = $state(course.description);
+  const { value: description } = useInput(course.description);
 
   async function handleSubmit(event: SubmitEvent) {
     event.preventDefault();
-    if (!$title.trim()) {
-      await showWarningDialog("Judul kursus wajib diisi.");
-      return;
-    }
-    if (await notify(await editCourse(course.id, { title: $title.trim(), description }))) {
-      onclose();
-    }
+    await runWithFeedback(
+      () => changeCourse(course.id, $title, $description),
+      () => {
+        onSaved();
+        onClose();
+      },
+    );
   }
 </script>
 
-<Modal title="Ubah Kursus" {onclose}>
-  <form class="space-y-4" data-testid="change-course-form" onsubmit={handleSubmit}>
+<ModalShell title="Ubah Kursus" {onClose}>
+  <form class="space-y-4" onsubmit={handleSubmit} novalidate>
     <div>
       <label for="change-title" class="mb-1 block text-sm font-medium">Judul</label>
-      <input id="change-title" type="text" bind:value={$title} class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200" />
+      <input name="title"
+        id="change-title"
+        type="text"
+        bind:value={$title}
+        class="w-full rounded-xl border border-slate-300 px-4 py-3"
+      />
     </div>
     <div>
-      <span class="mb-1 block text-sm font-medium">Deskripsi</span>
-      <MarkdownEditor bind:value={description} />
+      <label for="change-description" class="mb-1 block text-sm font-medium">
+        Deskripsi
+      </label>
+      <textarea name="description"
+        id="change-description"
+        rows="4"
+        bind:value={$description}
+        class="w-full rounded-xl border border-slate-300 px-4 py-3"
+      ></textarea>
     </div>
-    <div class="flex justify-end gap-2">
-      <button type="button" class="rounded-lg px-4 py-2 text-sm font-medium hover:bg-slate-100" onclick={onclose}>Batal</button>
-      <button type="submit" disabled={$mutating.change} class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60">
-        {$mutating.change ? "Menyimpan..." : "Simpan perubahan"}
+    <div class="flex justify-end gap-3">
+      <button type="button" onclick={onClose} class="rounded-xl px-4 py-2">
+        Batal
+      </button>
+      <button
+        type="submit"
+        disabled={$isChanging}
+        class="rounded-xl bg-indigo-600 px-5 py-2 font-semibold text-white disabled:opacity-60"
+      >
+        Simpan
       </button>
     </div>
   </form>
-</Modal>
+</ModalShell>

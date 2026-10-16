@@ -9,6 +9,4 @@
   <title>Detail Kursus | Delcom Courses</title>
 </svelte:head>
 
-{#key courseId}
-  <DetailPage {courseId} />
-{/key}
+<DetailPage {courseId} />

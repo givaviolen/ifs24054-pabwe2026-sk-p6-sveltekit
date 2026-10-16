@@ -1,26 +1,31 @@
-import { apiFetch } from "../../../helpers/apiHelper";
-import type { User } from "../../auth/api/authApi";
+import { apiRequest } from "../../../helpers/apiHelper";
 
-export interface ProfileInput {
-  name: string;
-  email: string;
+export function getUsers() {
+  return apiRequest<{ users: User[] }>("GET", "/users");
 }
 
-export interface PasswordInput {
-  password: string;
-  new_password: string;
+export function getMe() {
+  return apiRequest<{ user: User }>("GET", "/users/me");
 }
 
-export const fetchUsers = () => apiFetch<{ users: User[] }>("/users");
+export function putMe(name: string, email: string) {
+  return apiRequest<{ user: User }>("PUT", "/users/me", { name, email });
+}
 
-export const putProfile = (input: ProfileInput) =>
-  apiFetch("/users/me", { method: "PUT", body: input });
-
-export const postPhoto = (file: File) => {
+export function postPhoto(file: File) {
   const form = new FormData();
   form.append("photo", file);
-  return apiFetch("/users/photo", { method: "POST", form });
-};
+  return apiRequest("POST", "/users/me/photo", form);
+}
 
-export const putPassword = (input: PasswordInput) =>
-  apiFetch("/users/password", { method: "PUT", body: input });
+export function putPassword(
+  password: string,
+  newPassword: string,
+  confirmation: string,
+) {
+  return apiRequest("PUT", "/users/password", {
+    password,
+    new_password: newPassword,
+    new_password_confirmation: confirmation,
+  });
+}

@@ -1,88 +1,131 @@
 import Swal from "sweetalert2";
-import clsx, { type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
-import type { ActionResult } from "./apiHelper";
+import { isSuccess } from "./apiHelper";
 
-const PRIMARY_COLOR = "#4f46e5";
-
-export const cn = (...inputs: ClassValue[]): string => twMerge(clsx(inputs));
-
-export const showSuccessDialog = (message: string, title = "Berhasil") =>
-  Swal.fire({
+export function showSuccessDialog(message: string) {
+  return Swal.fire({
     icon: "success",
-    title,
+    title: "Berhasil",
     text: message,
-    confirmButtonColor: PRIMARY_COLOR,
+    confirmButtonColor: "#4f46e5",
   });
+}
 
-export const showErrorDialog = (message: string, title = "Gagal") =>
-  Swal.fire({
+export function showErrorDialog(message: string) {
+  return Swal.fire({
     icon: "error",
-    title,
+    title: "Gagal",
     text: message,
-    confirmButtonColor: PRIMARY_COLOR,
+    confirmButtonColor: "#4f46e5",
   });
+}
 
-export const showWarningDialog = (message: string, title = "Perhatian") =>
-  Swal.fire({
+export function showWarningDialog(message: string) {
+  return Swal.fire({
     icon: "warning",
-    title,
+    title: "Perhatian",
     text: message,
-    confirmButtonColor: PRIMARY_COLOR,
+    confirmButtonColor: "#4f46e5",
   });
+}
 
-export const showConfirmDialog = async (
-  message: string,
-  title = "Apakah Anda yakin?",
-  confirmText = "Ya, lanjutkan"
-): Promise<boolean> => {
+export async function showConfirmDialog(message: string): Promise<boolean> {
   const result = await Swal.fire({
     icon: "question",
-    title,
+    title: "Konfirmasi",
     text: message,
     showCancelButton: true,
-    confirmButtonText: confirmText,
+    confirmButtonText: "Ya",
     cancelButtonText: "Batal",
-    confirmButtonColor: PRIMARY_COLOR,
+    confirmButtonColor: "#4f46e5",
   });
   return result.isConfirmed;
-};
+}
 
-/** Menampilkan dialog sukses/gagal dari hasil aksi, lalu mengembalikan statusnya. */
-export const notify = async (result: ActionResult): Promise<boolean> => {
-  if (result.ok) {
-    await showSuccessDialog(result.message);
-  } else {
-    await showErrorDialog(result.message);
+export function formatDate(value: string): string {
+  return new Date(value).toLocaleDateString("id-ID", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
+/** Menggabungkan pesan utama dengan daftar pesan validasi dari `data`. */
+export function getErrorMessage(response: ApiResponse): string {
+  const data: Record<string, string | string[]> = response.data ?? {};
+  const details = Object.values(data).flat().join("\n");
+  return details ? `${response.message}\n${details}` : response.message;
+}
+
+export function getAssetUrl(path: string): string {
+  if (path.startsWith("http")) {
+    return path;
   }
-  return result.ok;
-};
+  return `${new URL(DELCOM_BASEURL).origin}/${path.replace(/^\//, "")}`;
+}
 
-export const formatDate = (value?: string | null): string =>
-  value
-    ? new Date(value).toLocaleDateString("id-ID", {
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-      })
-    : "-";
-
-export const averageRating = (ratings: { rating: number }[]): number => {
-  if (ratings.length === 0) {
-    return 0;
+export function getPhotoUrl(photo: string | null, name: string): string {
+  if (photo) {
+    return getAssetUrl(photo);
   }
-  const total = ratings.reduce((sum, item) => sum + item.rating, 0);
-  return Math.round((total / ratings.length) * 10) / 10;
-};
+  return getInitialsAvatar(name);
+}
 
-const YOUTUBE_PATTERN =
-  /(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})/;
+/** Inisial (maks. 2 huruf/angka) dari nama; "?" bila tidak ada. */
+export function getInitials(name: string): string {
+  return (
+    name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((word) => word[0])
+      .join("")
+      .replaceAll(/[^\p{L}\p{N}]/gu, "")
+      .toUpperCase() || "?"
+  );
+}
 
-/** Mengubah tautan YouTube biasa menjadi tautan embed. Kosong bila tidak valid. */
-export const getYoutubeEmbedUrl = (url: string): string => {
-  const match = YOUTUBE_PATTERN.exec(url);
-  return match ? `https://www.youtube.com/embed/${match[1]}` : "";
-};
+/** Avatar inisial berupa SVG data URI, dibuat lokal tanpa layanan pihak ketiga. */
+export function getInitialsAvatar(name: string): string {
+  const svg =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">' +
+    '<rect width="64" height="64" fill="#4f46e5"/>' +
+    '<text x="32" y="32" dy=".35em" text-anchor="middle" fill="#fff" ' +
+    'font-family="system-ui,sans-serif" font-size="26" font-weight="600">' +
+    `${getInitials(name)}</text></svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
 
-export const pickFile = (event: Event): File | undefined =>
-  (event.currentTarget as HTMLInputElement).files[0];
+export function getCoverUrl(cover: string | null): string {
+  return cover ? getAssetUrl(cover) : "/logo.svg";
+}
+
+export function formatRating(average: string | null): string {
+  return average ? Number(average).toFixed(1) : "Belum ada rating";
+}
+
+const YOUTUBE_REGEX =
+  /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([\w-]{11})/;
+
+/** Mengubah tautan YouTube (watch, youtu.be, embed, shorts) menjadi URL embed. */
+export function getYoutubeEmbedUrl(url: string): string | null {
+  const match = YOUTUBE_REGEX.exec(url);
+  return match ? `https://www.youtube.com/embed/${match[1]}` : null;
+}
+
+/**
+ * Menjalankan permintaan API lalu menampilkan dialog hasilnya.
+ * Mengembalikan `true` bila berhasil.
+ */
+export async function runWithFeedback(
+  task: () => Promise<ApiResponse>,
+  onSuccess: () => unknown,
+): Promise<boolean> {
+  const response = await task();
+  if (isSuccess(response)) {
+    await showSuccessDialog(response.message);
+    await onSuccess();
+    return true;
+  }
+  await showErrorDialog(getErrorMessage(response));
+  return false;
+}
